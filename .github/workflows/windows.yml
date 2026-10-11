@@ -11,7 +11,7 @@ jobs:
         shell: powershell
         run: ./scripts/build.ps1 -Package
       - name: Verify official components and entry point
-        shell: powershell
+        shell: pwsh
         run: |
           & './猛人下载器.exe' --check
           if ($LASTEXITCODE -ne 0) { throw 'Component verification failed' }
