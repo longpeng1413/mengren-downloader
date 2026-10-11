@@ -1,0 +1,22 @@
+﻿猛人下载器由一个含图标的 .NET Framework EXE 入口和 PowerShell / CMD 脚本和以下未修改的第三方组件组成。
+入口源码见 source/Launcher.cs，下载逻辑见 download.ps1，不依赖固定盘符、用户名或当前电脑的助手目录。
+
+yt-dlp 2026.08.19：官方下载的 Windows x64 独立程序（含 Python 和解析依赖）。
+https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19
+源码：https://github.com/yt-dlp/yt-dlp/tree/2026.08.19
+Windows 打包程序包含 GPLv3+ 组件；另附原项目和第三方许可证。
+
+FFmpeg 7.1：已有 imageio-ffmpeg 包内的 Gyan essentials 静态 Windows x64 程序，GPLv3+。
+https://www.gyan.dev/ffmpeg/builds/
+源码：https://github.com/FFmpeg/FFmpeg/tree/n7.1
+此副本用于合并音视频，不需要另装系统 ffmpeg。
+
+Node.js v24.19.0：已有本机运行组件中的 Windows x64 程序。
+https://nodejs.org/
+源码：https://github.com/nodejs/node/tree/v24.19.0
+Node 的许可证及第三方声明见 licenses/node-LICENSE.txt。
+
+SHA256.json 记录本包文件的 SHA-256；ZIP 外部另附压缩包 SHA-256。
+
+公开 ZIP 不含第三方 EXE；首次运行直接从上述官方项目下载并校验固定版本程序。
+本项目 MIT 许可证仅适用于自己的入口、脚本、图标和文档。

@@ -1,0 +1,15 @@
+/yt-dlp.exe
+/ffmpeg.exe
+/node.exe
+/猛人下载器.exe
+/launcher.exe
+/dist/
+/.components.lock
+/*.download
+/*.verified
+/*.zip
+/SHA256.json
+*.part
+*.mp4
+*.mkv
+*.webm

@@ -1,0 +1,21 @@
+name: Windows portable build
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build public portable package
+        shell: powershell
+        run: ./scripts/build.ps1 -Package
+      - name: Verify official components and entry point
+        shell: powershell
+        run: |
+          & './猛人下载器.exe' --check
+          if ($LASTEXITCODE -ne 0) { throw 'Component verification failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mengren-downloader-windows-x64
+          path: dist/*
