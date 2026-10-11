@@ -13,8 +13,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $zipPath = Join-Path $dist 'mengren-downloader-0.1.0-windows-x64.zip'
-$files = @('猛人下载器.exe','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE')
-foreach ($folder in @('assets','source','scripts','licenses')) {
+$files = @('猛人下载器.exe','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE','AGENTS.md','准备开发环境.cmd')
+foreach ($folder in @('assets','source','scripts','licenses','docs')) {
     Get-ChildItem -LiteralPath (Join-Path $root $folder) -Recurse -File | ForEach-Object { $files += $_.FullName.Substring($root.Length + 1) }
 }
 if (Test-Path -LiteralPath $zipPath -PathType Leaf) { Remove-Item -LiteralPath $zipPath -Force }

@@ -7,6 +7,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check developer prerequisites
+        shell: powershell
+        run: ./scripts/setup-dev.ps1 -CheckOnly
       - name: Build public portable package
         shell: powershell
         run: ./scripts/build.ps1 -Package
