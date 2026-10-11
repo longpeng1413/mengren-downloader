@@ -19,7 +19,7 @@ try {
     $cli = Get-Command gh.exe -ErrorAction SilentlyContinue
     if ($cli) {
         & $cli.Source --version
-        if ($LASTEXITCODE -ne 0) { throw '已安装的 GitHub CLI 无法启动，请修复或调整 PATH。' }
+        if ($LASTEXITCODE -ne 0) { Write-Warning 'GitHub CLI 无法启动；本地开发可继续，发布前需要修复或调整 PATH。' }
     } else { Write-Host 'GitHub CLI 未安装；不影响本地开发，发布时按开发文档准备。' }
     foreach ($relative in @('assets\app.ico','source\Launcher.cs','scripts\build.ps1','download.ps1','bootstrap.ps1','dependencies.json')) {
         if (!(Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { throw "源码缺少 $relative，请获取完整仓库。" }
