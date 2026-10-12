@@ -69,7 +69,10 @@ export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog
   async function requestOnce(address,{method='GET',headers={},body}={}) {
     const u=new URL(address);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw Error('Unsupported target');
     await validateHost(u.hostname);
-    let socket,options={hostname:u.hostname,port:u.port||undefined,path:u.pathname+u.search,method,headers:cleanHeaders({...headers,host:u.host}),lookup,timeout:30000,agent:false,ca:cas};
+    // Ask the server to keep the connection and close it ourselves after the body.
+    // Some Windows security filters reset server-closed connections before the
+    // response arrives; a client-side close avoids that without connection reuse.
+    let socket,options={hostname:u.hostname,port:u.port||undefined,path:u.pathname+u.search,method,headers:{...cleanHeaders({...headers,host:u.host}),connection:'keep-alive'},lookup,timeout:30000,agent:false,ca:cas};
     if(upstream&&u.protocol==='http:')options={...options,hostname:upstream.host,port:upstream.port,path:u.href,lookup:undefined};
     if(u.protocol==='https:') {
       socket=await rawTunnel(u.hostname,Number(u.port)||443);
@@ -78,7 +81,7 @@ export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog
       options.createConnection=()=>secure;options.agent=new https.Agent({keepAlive:false});options.agent.createConnection=()=>secure;
     }
     return await new Promise((done,reject)=>{
-      const outgoing=(u.protocol==='https:'?https:http).request(options,response=>done({response,address:u.href}));
+      const outgoing=(u.protocol==='https:'?https:http).request(options,response=>{response.once('end',()=>outgoing.destroy());done({response,address:u.href});});
       outgoing.on('timeout',()=>outgoing.destroy(Error('Request timeout')));outgoing.on('error',error=>{onDiagnostic('UPSTREAM '+error.code);const safe=Error('Upstream read or certificate validation failed');safe.code=error.code;reject(safe);});
       if(body){body.once('error',()=>outgoing.destroy());body.pipe(outgoing);}else outgoing.end();
     });

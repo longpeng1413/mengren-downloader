@@ -6,14 +6,18 @@ using System.Text;
 [assembly: AssemblyTitle("猛人下载器")]
 [assembly: AssemblyDescription("粘贴链接，选择画质，下载到系统下载文件夹")]
 [assembly: AssemblyProduct("猛人下载器")]
-[assembly: AssemblyVersion("0.4.0.0")]
-[assembly: AssemblyFileVersion("0.4.0.0")]
+[assembly: AssemblyVersion("0.4.1.0")]
+[assembly: AssemblyFileVersion("0.4.1.0")]
 internal static class Launcher {
+    private static volatile bool cancelRequested;
     private static int Main(string[] args) {
         bool check = args.Length == 1 && args[0] == "--check";
         Console.OutputEncoding = new UTF8Encoding(false);
         Console.InputEncoding = new UTF8Encoding(false);
-        Console.Title = "猛人下载器 v0.4.0";
+        Console.Title = "猛人下载器 v0.4.1";
+        // Ctrl+C reaches every process in this console. The task (PowerShell and its
+        // downloader) stops; the launcher stays alive so the window does not vanish.
+        Console.CancelKeyPress += delegate(object sender, ConsoleCancelEventArgs e) { e.Cancel = true; cancelRequested = true; };
         int code = 1;
         try {
             if (args.Length != 0 && !check) throw new ArgumentException("支持的参数：--check；正常下载请直接双击打开。");
@@ -34,10 +38,18 @@ internal static class Launcher {
                     process.WaitForExit();
                     code = process.ExitCode;
                 }
-                if (check || code == 130) break;
-                if (code == 20) { code = 0; break; }
+                bool cancelled = cancelRequested || code == 130;
+                cancelRequested = false;
+                if (check) break;
+                if (code == 20 && !cancelled) { code = 0; break; }
                 Console.WriteLine();
-                Console.WriteLine(code == 0 ? "本次任务已完成，可继续粘贴下一条链接。" : "本次任务未完成，可以重试或换一条链接。");
+                if (cancelled) {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("已中止本次任务。可粘贴下一条链接，直接回车退出。");
+                    Console.ResetColor();
+                } else {
+                    Console.WriteLine(code == 0 ? "本次任务已完成，可继续粘贴下一条链接。" : "本次任务未完成，可以重试或换一条链接。");
+                }
             }
         } catch (Exception error) {
             Console.ForegroundColor = ConsoleColor.Red;

@@ -4,10 +4,12 @@ import dns from 'node:dns';
 import {once} from 'node:events';
 import {randomUUID,createHash} from 'node:crypto';
 import {allowedMedia} from './sites.mjs';
+// 198.18.0.0/15 is a benchmarking range that no LAN device uses; Clash/Mihomo/Surge
+// TUN fake-ip DNS answers live there, so it is reachable rather than private.
 export function publicIp(ip) {
   if(ip.includes(':')) return /^[23][0-9a-f]{0,3}:/i.test(ip);
   const p=ip.split('.').map(Number); if(p.length!==4 || p.some(n=>!Number.isInteger(n)||n<0||n>255)) return false;
-  return !(p[0]===0 || p[0]===10 || p[0]===127 || p[0]>=224 || (p[0]===169&&p[1]===254) || (p[0]===172&&p[1]>=16&&p[1]<=31) || (p[0]===192&&p[1]===168) || (p[0]===100&&p[1]>=64&&p[1]<=127) || (p[0]===198&&(p[1]===18||p[1]===19)) || (p[0]===192&&p[1]===0));
+  return !(p[0]===0 || p[0]===10 || p[0]===127 || p[0]>=224 || (p[0]===169&&p[1]===254) || (p[0]===172&&p[1]>=16&&p[1]<=31) || (p[0]===192&&p[1]===168) || (p[0]===100&&p[1]>=64&&p[1]<=127) || (p[0]===192&&p[1]===0));
 }
 function lookup(host,options,callback) {
   dns.lookup(host,{all:true},(error,addresses)=>{

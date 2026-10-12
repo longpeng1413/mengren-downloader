@@ -45,6 +45,19 @@ export class Cdp {
     return {targetId, sessionId:await this.attach(targetId)};
   }
   async navigate(page,url) { await this.call('Page.navigate',{url},page.sessionId); }
+  // Close tabs this download opened. The last remaining tab is blanked instead,
+  // so the dedicated Edge window (and its login session) stays open for reuse.
+  async closePages(targetIds) {
+    for (const targetId of targetIds) {
+      try {
+        const {targetInfos} = await this.call('Target.getTargets');
+        const pages = targetInfos.filter(t => t.type === 'page');
+        if (!pages.some(t => t.targetId === targetId)) continue;
+        if (pages.length > 1) await this.call('Target.closeTarget', {targetId});
+        else await this.call('Page.navigate', {url:'about:blank'}, await this.attach(targetId));
+      } catch { }
+    }
+  }
   close() { this.socket.close(); }
 }
 export async function ensureBrowser() {

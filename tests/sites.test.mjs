@@ -35,8 +35,9 @@ test('HLS nested manifests, AES keys and relative segments are rewritten',()=>{
   assert.throws(()=>rewritePlaylist('#EXTM3U\nhttps://127.0.0.1/key','https://media.xet.tech/x.m3u8',url=>{if(!allowedMedia('xiaoe',url)) throw Error('refused');return url;}));
 });
 test('Private, loopback and reserved media addresses are refused',()=>{
-  for(const value of ['127.0.0.1','10.0.0.1','169.254.1.1','192.168.1.1','172.16.1.1','100.64.1.1','198.18.1.1','::1','fe80::1','fc00::1','::ffff:127.0.0.1']) assert.equal(publicIp(value),false,value);
-  for(const value of ['8.8.8.8','1.1.1.1','240e::1']) assert.equal(publicIp(value),true,value);
+  for(const value of ['127.0.0.1','10.0.0.1','169.254.1.1','192.168.1.1','172.16.1.1','100.64.1.1','::1','fe80::1','fc00::1','::ffff:127.0.0.1']) assert.equal(publicIp(value),false,value);
+  // Clash/Mihomo TUN fake-ip answers (198.18.0.0/15) must stay usable.
+  for(const value of ['8.8.8.8','1.1.1.1','240e::1','198.18.0.5','198.19.255.1']) assert.equal(publicIp(value),true,value);
 });
 async function evaluate(expression,origin,respond) {
   const calls=[];
@@ -95,4 +96,32 @@ test('Bilibili browser fallback honours current part, quality cap and separate a
   context.window.__playinfo__.data.durl=[{url:'https://upos.bilivideo.com/1080.mp4'}];context.window.__playinfo__.data.quality=80;
   const noUpsize=await vm.runInNewContext(biliProbeExpression(href,'480'),context);assert.equal(noUpsize.state,'quality-unavailable');
   context.location.href=href+'?p=2';const wrong=await vm.runInNewContext(biliProbeExpression(href,'720'),context);assert.equal(wrong.state,'loading');
+});
+
+test('Abandoned download folders are removed only when their owner has exited',async()=>{
+  const {mkdtemp,mkdir,writeFile,readdir,utimes,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {spawnSync}=await import('node:child_process');
+  const {removeAbandonedJobs}=await import('../source/site-download.mjs');
+  const output=await mkdtemp(join(tmpdir(),'mengren-stale-test-'));
+  try {
+    const exited=spawnSync(process.execPath,['-e','process.stdout.write(String(process.pid))'],{encoding:'utf8'});const deadPid=Number(exited.stdout);
+    const make=async(name,owner)=>{const job=join(output,name);await mkdir(job);await writeFile(join(job,'source.part'),'partial');if(owner!==undefined)await writeFile(join(job,'.owner'),JSON.stringify({pid:owner}));return job;};
+    await make('.mengren-Dead01',deadPid);await make('.mengren-Live01',process.pid);await make('.mengren-New001');
+    const old=await make('.mengren-Old001');const day=new Date(Date.now()-2*86400000);await utimes(old,day,day);
+    await make('.mengren-keep-user-folder',deadPid);await make('课程视频',deadPid);
+    const nested=await make('.mengren-Nest01',deadPid);await mkdir(join(nested,'inner'));
+    assert.equal(await removeAbandonedJobs(output),2);
+    assert.deepEqual((await readdir(output)).sort(),['.mengren-Live01','.mengren-Nest01','.mengren-New001','.mengren-keep-user-folder','课程视频'].sort());
+  } finally {await rm(output,{recursive:true,force:true});}
+});
+
+test('Finished downloads close only the tabs they opened and keep the Edge window',async()=>{
+  const {Cdp}=await import('../source/browser.mjs');
+  let pages=[{targetId:'user',type:'page'},{targetId:'a',type:'page'},{targetId:'b',type:'page'}];const calls=[];
+  const fake=Object.create(Cdp.prototype);
+  fake.call=async(method,params,sessionId)=>{calls.push([method,params?.targetId||params?.url,sessionId]);if(method==='Target.getTargets')return {targetInfos:pages};if(method==='Target.closeTarget')pages=pages.filter(p=>p.targetId!==params.targetId);if(method==='Target.attachToTarget')return {sessionId:'s-'+params.targetId};return {};};
+  await fake.closePages(['a','b','gone']);
+  assert.deepEqual(pages.map(p=>p.targetId),['user']);
+  pages=[{targetId:'only',type:'page'}];calls.length=0;await fake.closePages(['only']);
+  assert.deepEqual(pages.map(p=>p.targetId),['only']);assert.ok(calls.some(([m,u,s])=>m==='Page.navigate'&&u==='about:blank'&&s==='s-only'));
 });

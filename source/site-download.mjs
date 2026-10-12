@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {mkdir,mkdtemp,readFile,readdir,unlink,rmdir,link,copyFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,readdir,unlink,rmdir,link,copyFile,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -44,6 +44,26 @@ async function cleanup(job,output) {
   }
   await rmdir(job).catch(()=>{});
 }
+const ownerFile='.owner';
+function running(pid) {try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}}
+// Closing the window mid-download kills this process before cleanup. Remove such
+// leftovers next time: only our own .mengren-XXXXXX folders whose owner process has
+// exited, or legacy folders without an owner record that are a day old.
+export async function removeAbandonedJobs(output,{now=Date.now()}={}) {
+  let entries;try{entries=await readdir(output,{withFileTypes:true});}catch{return 0;}
+  let removed=0;
+  for(const entry of entries) {
+    if(!entry.isDirectory()||!/^\.mengren-[A-Za-z0-9]{6}$/.test(entry.name)) continue;
+    const job=join(output,entry.name);
+    try {
+      let pid;try{pid=JSON.parse(await readFile(join(job,ownerFile),'utf8')).pid;}catch{}
+      if(Number.isInteger(pid)?running(pid):now-(await stat(job)).mtimeMs<86400000) continue;
+      if((await readdir(job,{withFileTypes:true})).some(item=>!item.isFile())) continue;
+      await cleanup(job,output);removed++;
+    } catch { }
+  }
+  return removed;
+}
 export function videoFileName(title,address,{titleOnly=false,order}={}) {
   let name=String(title||'视频').replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').trim().slice(0,110).replace(/[. ]+$/,'');
   if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name='视频 '+name;
@@ -70,8 +90,10 @@ export async function downloadSite(address,output,{probe=false,quality='best',ti
 export async function downloadResolved(info,address,output,{probe=false,relayOptions={}}={}) {
   message('已识别：'+info.title);
   message(info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
-  const outputPath=resolve(output);message('保存位置：'+outputPath);if(!probe) await mkdir(outputPath,{recursive:true});
+  const outputPath=resolve(output);message('保存位置：'+outputPath);
+  if(!probe) {await mkdir(outputPath,{recursive:true});if(await removeAbandonedJobs(outputPath))message('已清理上次中断留下的临时文件。');}
   const job=probe?null:await mkdtemp(join(outputPath,'.mengren-'));
+  if(job) await writeFile(join(job,ownerFile),JSON.stringify({pid:process.pid}));
   const choices=info.renditions||[{url:info.mediaUrl}];let lastError;
   try {
     for(const rendition of choices.slice(0,4)) {
@@ -109,7 +131,7 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
       } catch(error) {
         if(cancelled) throw new Error('下载已取消');
         lastError=error;
-        if(job) for(const file of await readdir(job)) await unlink(join(job,file)).catch(()=>{});
+        if(job) for(const file of await readdir(job)) if(file!==ownerFile) await unlink(join(job,file)).catch(()=>{});
         if(choices.length>1) message('这条回放线路未成功，正在尝试下一条网站提供的线路。');
       } finally {await relay.close();}
     }

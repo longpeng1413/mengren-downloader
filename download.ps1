@@ -59,7 +59,7 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.4.0（便携版）'
+        Write-Host '猛人下载器 v0.4.1（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频网页链接'
     }
@@ -104,11 +104,19 @@ try {
             Write-Host '2. 1080P 及以下'
             Write-Host '3. 720P 及以下'
             Write-Host '4. 480P 及以下'
-            $choice = Read-MengrenInput '请选择 1-4，直接回车选最高画质'
-            $Quality = switch ($choice.Trim()) {
-                '' { 'best' }; '1' { 'best' }; '2' { '1080' }; '3' { '720' }; '4' { '480' }
-                default { throw '请选择 1、2、3 或 4。' }
+            # Ask again on a typo instead of failing the task and losing the pasted link.
+            # $Quality carries ValidateSet, so collect the answer separately first.
+            $picked = $null
+            while (!$picked) {
+                $choice = Read-MengrenInput '请选择 1-4，直接回车选最高画质'
+                if ($null -eq $choice) { throw '没有读取到画质选择。' }
+                $picked = switch ($choice.Trim()) {
+                    '' { 'best' }; '1' { 'best' }; '2' { '1080' }; '3' { '720' }; '4' { '480' }
+                    default { $null }
+                }
+                if (!$picked) { Write-Host '请输入 1、2、3 或 4；直接回车选最高画质。' -ForegroundColor Yellow }
             }
+            $Quality = $picked
         }
     }
     $format = 'bv*+ba/b'

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,copyFile,writeFile,unlink,rmdir} from 'node:fs/promises';
+import {mkdtemp,copyFile,writeFile,unlink,rmdir,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
@@ -72,4 +72,45 @@ test('Declining capture returns to link input without activating system settings
     child.on('error',error=>{clearTimeout(timer);reject(error);});child.on('close',code=>{clearTimeout(timer);done({code,text,sent,declined});});
   });
   assert.equal(result.code,0);assert.equal(result.sent,2);assert.equal(result.declined,true);assert.equal(result.text.includes('抓取已开启'),false);
+});
+
+test('A mistyped quality asks again instead of discarding the pasted link',async()=>{
+  const result=await new Promise((done,reject)=>{
+    const child=spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',resolve('download.ps1'),'-Url','https://www.youtube.com/watch?v=jNQXAC9IVRw','-OutputDirectory',tmpdir()],{stdio:['pipe','pipe','pipe'],windowsHide:true});
+    let text='',sent=0;
+    const timer=setTimeout(()=>{child.kill();reject(Error('Quality prompt timed out'));},30000);
+    // Two typos, then end of input: no download may start, and the prompt repeats.
+    const receive=buffer=>{text+=buffer.toString('utf8');const prompts=(text.match(/请选择 1-4/g)||[]).length;while(sent<prompts){if(sent<2)child.stdin.write(['9','abc'][sent]+'\n');else child.stdin.end();sent++;}};
+    child.stdout.on('data',receive);child.stderr.on('data',receive);child.stdin.on('error',()=>{});
+    child.on('error',error=>{clearTimeout(timer);reject(error);});child.on('close',code=>{clearTimeout(timer);done({code,text});});
+  });
+  assert.equal((result.text.match(/请选择 1-4/g)||[]).length,3);
+  assert.equal((result.text.match(/请输入 1、2、3 或 4/g)||[]).length,2);
+  assert.ok(result.text.includes('没有读取到画质选择'));assert.equal(result.text.includes('正在解析和下载'),false);assert.equal(result.code,1);
+});
+
+test('Ctrl+C stops only the running task; the window stays for the next link',async()=>{
+  const folder=await mkdtemp(join(tmpdir(),'mengren-ctrlc-')),exe=join(folder,'launcher.exe'),worker=join(folder,'download.ps1'),output=join(folder,'result.json');
+  await copyFile(resolve('猛人下载器.exe'),exe);
+  await writeFile(worker,'﻿'+[
+    'param([switch]$Check,[switch]$Session)',
+    '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
+    'Write-Host "SESSION_READY"',
+    '$value = [Console]::ReadLine()',
+    'if ([string]::IsNullOrWhiteSpace($value)) { exit 20 }',
+    'Write-Host "LONG_START"',
+    `& '${resolve('node.exe').replace(/'/g,"''")}' -e "setTimeout(()=>{},20000)"`,
+    'Write-Host "AFTER_NATIVE"',
+    'exit 1'
+  ].join('\r\n'),'utf8');
+  try {
+    // The harness needs its own console to deliver a real Ctrl+C, hence Start-Process.
+    const harness=resolve('tests/ctrlc-harness.ps1').replace(/'/g,"''");
+    const command=`Start-Process powershell.exe -WindowStyle Hidden -Wait -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','"${harness}"','-Launcher','"${exe}"','-Result','"${output}"')`;
+    const code=await new Promise((done,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-Command',command],{stdio:'ignore',windowsHide:true});const timer=setTimeout(()=>{child.kill();reject(Error('Ctrl+C harness timed out'));},90000);child.on('error',reject);child.on('close',value=>{clearTimeout(timer);done(value);});});
+    assert.equal(code,0);
+    const result=JSON.parse((await readFile(output,'utf8')).replace(/^﻿/,''));
+    assert.equal(result.sentCtrlC,true);assert.equal(result.code,0);assert.equal(result.ready,2);
+    assert.ok(result.text.includes('已中止本次任务'));assert.equal(result.text.includes('AFTER_NATIVE'),false);
+  } finally {await rm(folder,{recursive:true,force:true});}
 });

@@ -3,11 +3,13 @@ import {isXiaoe,xiaoeAddress,channelsShare,isPlayback,allowedMedia,xiaoeProbeExp
 export async function resolveSource(address,{timeout=600000,notify=()=>{},isCancelled=()=>false,quality='best'}={}) {
   const share=channelsShare(address),site=isXiaoe(address)?'xiaoe':share?'channels':douyinAddress(address)?'douyin':biliAddress(address)?'bili':null;
   if(!site) throw new Error('不是受支持的网站视频链接');
-  const browser=await ensureBrowser(), deadline=Date.now()+timeout;
+  const browser=await ensureBrowser(), deadline=Date.now()+timeout, created=[];let succeeded=false;
+  const open=async url=>{const page=await browser.page(url);created.push(page.targetId);return page;};
+  const done=value=>{succeeded=true;return value;};
   try {
     if(site==='douyin'||site==='bili') {
       let canonical=site==='douyin'?douyinAddress(address):biliAddress(address);
-      const page=await browser.page(canonical);let notified=false;
+      const page=await open(canonical);let notified=false;
       while(Date.now()<deadline&&!isCancelled()) {
         await sleep(2500);
         let current;try{current=await browser.evaluate(page.sessionId,'location.href');}catch{continue;}
@@ -24,12 +26,12 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
         if(answer?.state==='unavailable')throw new Error('该视频页面暂不支持读取，请确认视频仍可正常播放');
         if(answer?.state==='ready') {
           if(!browserMediaAllowed(site,canonical,answer.mediaUrl)||(answer.audioUrl&&!browserMediaAllowed(site,canonical,answer.audioUrl)))throw new Error('播放器媒体地址不符合该平台要求');
-          return {site,page:canonical,title:answer.title,mediaUrl:answer.mediaUrl,audioUrl:answer.audioUrl,seconds:answer.seconds};
+          return done({site,page:canonical,title:answer.title,mediaUrl:answer.mediaUrl,audioUrl:answer.audioUrl,seconds:answer.seconds});
         }
         if(!notified){notify('请在下载专用 Edge 中确认该视频能播放；网站如要求登录或验证，请自行在原网站完成，软件随后自动继续。');notified=true;}
       }
     } else if(site==='xiaoe') {
-      let page=await browser.page(address);let canonical=xiaoeAddress(address),loginOpened=false,contextChosen=false;
+      let page=await open(address);let canonical=xiaoeAddress(address),loginOpened=false,contextChosen=false;
       while(Date.now()<deadline && !isCancelled()) {
         await sleep(2000);
         let current;try {current=await browser.evaluate(page.sessionId,'location.href');} catch {continue;}
@@ -39,7 +41,7 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
           const origin=new URL(canonical).origin;
           const {targetInfos}=await browser.call('Target.getTargets');
           const own=targetInfos.find(t=>t.type==='page' && t.url.startsWith(origin+'/') && !t.url.includes('/auth'));
-          page=own?{targetId:own.targetId,sessionId:await browser.attach(own.targetId)}:await browser.page(origin+'/p/decorate/personal_center');
+          page=own?{targetId:own.targetId,sessionId:await browser.attach(own.targetId)}:await open(origin+'/p/decorate/personal_center');
           contextChosen=true;await sleep(2000);
         }
         let answer;try {answer=await browser.evaluate(page.sessionId,xiaoeProbeExpression(canonical));} catch {continue;}
@@ -56,13 +58,13 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
         if(answer?.state==='ready') {
           const renditions=answer.renditions.filter(item=>allowedMedia(site,item.url)&&/\.m3u8$/i.test(new URL(item.url).pathname)).sort((a,b)=>Number(b.default)-Number(a.default));
           if(!renditions.length) throw new Error('小鹅通没有返回允许的回放地址');
-          return {site,page:canonical,title:answer.title,mediaUrl:renditions[0].url,renditions};
+          return done({site,page:canonical,title:answer.title,mediaUrl:renditions[0].url,renditions});
         }
       }
     } else {
       const {targetInfos}=await browser.call('Target.getTargets');
       const existing=targetInfos.find(t=>t.type==='page' && t.url.startsWith('https://yuanbao.tencent.com/'));
-      const page=existing?{targetId:existing.targetId,sessionId:await browser.attach(existing.targetId)}:await browser.page('https://yuanbao.tencent.com/');
+      const page=existing?{targetId:existing.targetId,sessionId:await browser.attach(existing.targetId)}:await open('https://yuanbao.tencent.com/');
       let loginNotified=false,playback;
       while(Date.now()<deadline && !isCancelled()) {
         await sleep(4000);
@@ -72,17 +74,22 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
           if(answer?.state==='unavailable') throw new Error('元宝暂未返回可播放视频号地址，该链接可能暂不支持；请在元宝确认登录后重试');
           if(answer?.state!=='ready') continue;
           if(!isPlayback(answer.playbackUrl)) throw new Error('元宝返回的播放地址不符合腾讯官方域名要求');
-          playback=await browser.page(answer.playbackUrl);await sleep(3000);
+          playback=await open(answer.playbackUrl);await sleep(3000);
         }
         let info;try {info=await browser.evaluate(playback.sessionId,playbackProbeExpression);} catch {continue;}
         if(info?.state==='unavailable') throw new Error('腾讯官方播放页暂时不能读取此视频，请重新读取分享链接');
         if(info?.state==='ready') {
           if(!allowedMedia(site,info.mediaUrl)) throw new Error('视频号媒体地址不符合腾讯官方域名要求');
-          return {site,page:share,title:info.title,mediaUrl:info.mediaUrl};
+          return done({site,page:share,title:info.title,mediaUrl:info.mediaUrl});
         }
       }
     }
     if(isCancelled()) throw new Error('下载已取消');
     throw new Error('等待网站登录或播放器超时，请完成原网站登录后重试');
-  } finally {browser.close();}
+  } finally {
+    // Media addresses are already read; close our tabs so players stop. Failed
+    // attempts keep them open for the user to finish login or check the page.
+    if(succeeded) await browser.closePages(created);
+    browser.close();
+  }
 }

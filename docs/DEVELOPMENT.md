@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.1-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -157,7 +157,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 
 - 抖音通过普通 Edge 原网页读取可见播放器的 currentSrc；遇到 MSE 播放器时仅接受所选视频匹配的资源，检查视频时长，分离音画时验证请求组与时长一致。支持短链跳转、完整链接和分享文案提取，不调用第三方解析服务或导出 Cookie。未能明确绑定到所选视频时等待或失败，不猜选其他视频。
 - B 站优先使用原 yt-dlp 流程和画质上限；失败才读取专用 Edge 当前 BV/AV、选定分 P 的 INITIAL_STATE/playinfo 或同站官方 player/playurl。独立音轨在受限媒体中继中下载后合并。网页读取同样受用户正常账号权限限制；不会自动下载全集或破解 DRM。
-- 正常入口是 C# 连续会话：子任务 `-Session` 的退出码 20 仅代表空输入退出；错误返回 1 后继续，取消返回 130 结束。每个子任务独立读取画质，避免上个任务的选择泄漏到下个任务。`download.ps1 -Url` 保持一次性调用，`--check` 不等待输入。
+- 正常入口是 C# 连续会话：子任务 `-Session` 的退出码 20 仅代表空输入退出；错误返回 1 后继续；Ctrl+C 由入口拦截，只中止当前 PowerShell/下载子进程（退出码 130 同义），随后提示“已中止本次任务”并回到链接输入。每个子任务独立读取画质，避免上个任务的选择泄漏到下个任务。`download.ps1 -Url` 保持一次性调用，`--check` 不等待输入。
 - 输入使用 Console.ReadLine 与显式提示刷新，避免 Read-Host 在重定向输入下隐藏提示或阻塞。会话测试包含正式入口空输入退出及模拟成功/失败重试；真实网站连续下载仍需本机验证。
 - 公开回归样例：B 站 `BV1vL411G7N7`，抖音 `6961737553342991651`。来自上游 yt-dlp 官方测试样例，可能随时间失效；测试内容不提交、不随软件打包。
 
@@ -218,3 +218,11 @@ source/capture-menu.mjs 实现数字、范围、多编号和“全部”顺序�
 用户已确认 v0.4.0-alpha.4 实际测试可用并要求正式发布。v0.4.0 保持同样的功能/依赖，仅更新当前版本标识、说明、发布入口与验证状态，旧预发布 tag/资产保持不变。正式包为 mengren-downloader-0.4.0-windows-x64-full.zip，包含全部组件；常规用户无需运行“准备开发环境”。
 本机正式 Git 开发目录已由用户明确要求改为 D:\mengren-downloader，与 GitHub 仓库同名；Git 历史、remote 和所有忽略文件完整保留，原指向旧目录的桌面快捷方式已更新。软件中文名称仍为猛人下载器。新电脑不要求 D 盘，克隆目录可自定；操作始终以当前 repo 证据为准。
 历史 alpha 段落描述当时的修复过程；当前验证状态以正式版记录为准。强制退出/断电恢复、所有课程/平台格式不在用户本次验收保证范围内。
+
+## 维护修复后的约定（2026-10-12）
+
+- `source/browser.mjs` 的 `closePages` 只关闭本次 `resolveSource` 新开的标签；成功取得媒体地址后调用，失败时保留页面供用户处理登录/权限。窗口只剩一个标签时改为 `about:blank`，不关闭专用 Edge。
+- `site-download.mjs` 在每个 `.mengren-XXXXXX` 临时目录写 `.owner`（进程号）。`removeAbandonedJobs` 只删除所属进程已退出、且只含文件的本程序临时目录；没有 `.owner` 的旧目录满 24 小时才删除。
+- `publicIp` 允许 198.18.0.0/15（Clash/Mihomo/Surge TUN fake-ip），其余私网、回环、链路本地、CGNAT 范围仍拒绝。
+- 入口用 `Console.CancelKeyPress` 拦截 Ctrl+C：子任务停止，入口提示后继续会话。`tests/ctrlc-harness.ps1` 在独立隐藏控制台里发送真实 Ctrl+C；测试运行器会让子进程继承“忽略 Ctrl+C”，所以 harness 启动入口前要先恢复正常 Ctrl+C 处理。
+- 部分 Windows 电脑（已观察到运行 360 主动防御的开发机）会重置由服务器先关闭的回环短连接。抓取代理上游请求和测试客户端都请求保持连接、并在响应结束后由本方关闭；新写的回环测试也应这样做，不要用增加重试次数掩盖。

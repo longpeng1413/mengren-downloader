@@ -4,19 +4,19 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.4.0 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.4.1 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.4.0/mengren-downloader-0.4.0-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
+**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.4.1/mengren-downloader-0.4.1-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
 
-到 [v0.4.0 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.4.0) 下载 `mengren-downloader-0.4.0-windows-x64-full.zip`。
+到 [v0.4.1 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.4.1) 下载 `mengren-downloader-0.4.1-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
 2. 双击 **猛人下载器.exe**。完整便携包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。
 3. 粘贴视频链接。YouTube、B 站可以选择最高画质、1080P、720P 或 480P；小鹅通/视频号/抖音按网页提供的画质下载。
 4. 等待视频、音频下载及合并，完成后到当前电脑的系统 **下载** 文件夹查看。
-5. 窗口会再次提示粘贴链接：输入新链接继续下载，**不输入内容、直接回车就退出**。失败后也可换链接或重试；每个新任务重新选择画质。
+5. 窗口会再次提示粘贴链接：输入新链接继续下载，**不输入内容、直接回车就退出**。失败后也可换链接或重试；每个新任务重新选择画质。下载中按 **Ctrl+C** 只中止当前任务，窗口保留，可继续粘贴下一条链接。
 
 YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P 也会下载最佳的 720P。直接回车默认最高画质；竖屏上限按高度计算。
 
@@ -36,7 +36,7 @@ YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P
 
 **抖音**：粘贴 `https://www.douyin.com/video/...`、`https://v.douyin.com/...` 或包含链接的分享文案。软件打开专用 Edge，读取当前视频播放器提供的音视频；需要登录或验证时请在原网站完成，随后自动继续。当前不提供抖音清晰度档位，也不保证所有视频的播放器格式可读取。
 
-**B 站**：支持 BV/AV 视频链接、手机网页链接、`b23.tv` 分享短链，以及 `?p=2` 等单个分 P。优先直接解析；失败时打开专用 Edge，从当前视频页面读取并合并音画。画质范围取决于平台和账号当前权限，选择“最高”不代表可取得付费或账号未获授权的画质；不会自动下载全部分 P。
+**B 站**：支持 BV/AV 视频链接、手机网页链接、`b23.tv` 分享短链，以及 `?p=2` 等单个分 P。优先直接解析；失败时打开专用 Edge，从当前视频页面读取并合并音画。画质范围取决于平台和账号当前权限，选择“最高”不代表可取得付费或账号未获授权的画质；直接解析成功时不使用专用 Edge 的登录，因此大会员专属画质目前拿不到；不会自动下载全部分 P。
 
 ## 小鹅通和微信视频号
 
