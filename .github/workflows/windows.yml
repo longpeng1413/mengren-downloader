@@ -18,6 +18,11 @@ jobs:
         run: |
           & './猛人下载器.exe' --check
           if ($LASTEXITCODE -ne 0) { throw 'Component verification failed' }
+      - name: Site integration regression tests
+        shell: pwsh
+        run: |
+          & ./node.exe --test tests/sites.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Site tests failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: mengren-downloader-windows-x64

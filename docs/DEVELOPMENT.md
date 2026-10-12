@@ -14,6 +14,7 @@
 | 网络 | 能访问 GitHub、Node.js 官方分发站点，以及实际测试的视频网站/媒体域名 |
 | 存储 | 官方组件初始化下载约 194 MiB；建议项目盘预留至少 1 GiB，视频下载盘另外预留视频和临时音画文件空间 |
 | GitHub CLI（可选） | 仅发布 Release、查看云端检查、创建 PR 时需要；本地构建不需要登录 GitHub |
+| Microsoft Edge（小鹅通/视频号需要） | 使用已安装的 Edge，无需扩展；软件只启动自己的配置目录，不重启日常浏览器 |
 | AI 工具/编辑器（任选） | 能读取整个仓库并执行 PowerShell；不绑定 Codex 或 Claude，不要求特定模型或插件 |
 
 无需安装 Python、系统 Node.js、Visual Studio、NuGet、npm 包、剪藏插件或剪藏助手。常规构建/下载不需管理员权限；安装 Git/GitHub CLI 或修复 Windows 自带组件可能出现系统授权提示。
@@ -55,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1 -C
 | --- | --- | --- |
 | yt-dlp.exe | 2026.08.19 | yt-dlp 官方 GitHub Release，视频解析下载 |
 | ffmpeg.exe | 7.1 essentials | GyanD/codexffmpeg 官方构建 Release，音画合并 |
-| node.exe | 24.19.0 | nodejs.org 官方 Windows x64，YouTube JS 解析 |
+| node.exe | 24.19.0 | nodejs.org 官方 Windows x64，YouTube JS 解析、浏览器连接、站点下载 |
 
 实际版本、下载 URL、字节数、EXE SHA-256、FFmpeg ZIP SHA-256 和目标成员名以根目录 `dependencies.json` 为唯一依据。现有文件哈希匹配即复用；缺少或哈希不同才重新从官方下载。FFmpeg ZIP 只提取指定成员，校验后才使用。
 
@@ -91,12 +92,14 @@ winget install --id GitHub.cli -e --source winget
 | `source/Launcher.cs` | 带图标的 C# 控制台入口，启动项目内下载脚本 |
 | `download.ps1` | 链接输入、画质上限、系统下载目录、yt-dlp 参数与错误处理 |
 | `bootstrap.ps1` | 固定依赖下载、哈希校验、组件准备锁 |
+| `source/*.mjs` | 两个站点的地址校验、Edge 会话、原网站 API 读取和受限本机中继 |
+| `tests/sites.test.mjs` | 链接格式、登录范围、媒体地址/清单重写回归 |
 | `dependencies.json` | 官方下载组件锁定清单 |
 | `scripts/setup-dev.ps1` | 新电脑开发环境检查、构建和组件准备 |
 | `scripts/build.ps1` | 编译 C#，生成公开 ZIP 和 SHA256SUMS |
 | `create-shortcut.ps1` | 当前电脑桌面入口，不需要固定用户名/路径 |
 | `assets/`、`licenses/` | 用户提供的图标、第三方原始许可 |
-| `.github/workflows/windows.yml` | Windows 云端环境检查、构建、组件验证及产物上传 |
+| `.github/workflows/windows.yml` | Windows 云端环境检查、构建、组件验证、站点单测及产物上传 |
 
 `.ps1` 必须 UTF-8 带 BOM，换行 CRLF；内联含中文的 Windows Actions 命令用 `pwsh`。`source/Launcher.cs` 保持 Framework 自带编译器可支持的语法。`.editorconfig` / `.gitattributes` 约定编码与换行；不要格式化上游 `licenses` 文本。没有 Python 项目、npm 项目或 `.csproj`；不要因此补出多余的环境。
 
@@ -109,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.1.0-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.2.0-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -125,10 +128,30 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Qua
 # 下面会实际下载一个短视频；选择自己的可写临时目录
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Quality 480 -Url 'https://www.youtube.com/watch?v=jNQXAC9IVRw' -OutputDirectory "$env:TEMP\mengren-smoke"
 # 对上一步输出的实际文件，使用完整路径检查整段音视频解码
-.\ffmpeg.exe -v error -i '实际输出文件完整路径' -f null -
+.\ffmpeg.exe -v error -xerror -i '实际输出文件完整路径' -fps_mode passthrough -enc_time_base demux -f null -
 ```
 
 依次检查每条命令退出码。`Probe` 只打印视频 ID、标题、分辨率和格式，不输出媒体签名；测试视频与临时文件不要提交。错误报告保留必要错误类型，不包含登录信息或带签名的媒体地址。
+
+## 浏览器与站点接入（v0.2.0）
+
+- `source/browser.mjs` 使用随包 Node 的原生 WebSocket 连接 Edge CDP。只用自己的 `%LOCALAPPDATA%\MengrenDownloader\BrowserProfile`，调试端口绑定 `127.0.0.1`、由浏览器动态分配，读取自己的 DevToolsActivePort。不会开放远端端口或复制日常 Edge 配置。
+- Microsoft Edge 安装在标准路径（Program Files / Program Files (x86) / LOCALAPPDATA）；找不到时给出明确错误，不自动安装、不下载浏览器。
+- 登录由用户在原网站手动完成。程序仅从精确同店铺/元宝原网站执行相关 API 请求，Cookie 由浏览器按原站规则发送；不通过 CDP Cookie/密码接口读取账户信息。
+- 小鹅通从原分享短链得到同店铺回放地址，再在同店铺已登录页面读取 `get_lookback_list` / `base_info`。店铺返回未登录时打开它自己的登录页并自动等待。未授权、无回放或未结束直播不作为下载成功。
+- 元宝原网站仅调用 `/api/weixin/get_parse_result` 解析所选视频号分享链接。临时播放凭证只用于 `channels.weixin.qq.com` 官方页，媒体签名只发往 `finder.video.qq.com`；不转交元宝/微信 Cookie，也不发送聊天消息。
+- `source/relay.mjs` 限定站点域名/路径、公网 DNS 地址、HTTPS 和重定向次数。小鹅通的清单、子清单、音画片段及普通 AES-128 密钥统一重写为短期本机地址；不支持的媒体保护格式直接拒绝。视频号文件采用流式读取，避免把完整视频缓存到内存。
+- 子进程只看到本机中继地址，不看到上游媒体签名；内部 yt-dlp 使用空代理以避免系统代理接管回环连接。不会修改全局代理。
+- 下载先进入目标目录下的自有临时目录，检查视频轨道及原有音频后封装 MP4（无声视频保留为无声，不伪造音轨），再保存最终文件；失败不发布成完整结果。重复下载使用新文件名，不覆盖已完成视频。
+- 当前小鹅通/视频号下载网站提供的原始源，不承诺清晰度档位。主要目标是已结束直播回放与腾讯官方可解析分享链接，不涵盖所有课程类型或视频号。
+
+```powershell
+.\node.exe --test tests/sites.test.mjs
+# 只验证指定平台来源：仍会打开原网站并等待用户正常登录
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url '用户选择的平台分享链接'
+```
+
+源文件均为标准 ES 模块，不需要 `npm install`。原生 WebSocket 使用随包 Node 24；别改为系统 Node 或新增隐含运行依赖。参考：[Node 原生 WebSocket](https://nodejs.org/docs/latest-v24.x/api/globals.html#class-websocket)、[Chromium 自定义配置目录调试说明](https://developer.chrome.com/blog/remote-debugging-port)。站点 API 行为可能变化，回归测试只检查边界与流程，真实登录/下载要在本机单独验证，不能把 CI 成功当作所有网站可用。
 
 ## 7. Git 同步与发布
 
@@ -144,7 +167,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Quality 48
 4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件，不上传个人完整包。
 5. 核对 GitHub Release 是否公开、是否正确标为稳定/预发布、资产名/大小/摘要和源码提交关系。
 
-个人迁移完整包可包含项目内已有且通过哈希验证的三个 EXE；仍需保留相应许可。它不是目前默认公共发布物。源码/文档的小改动可只同步仓库，无需重发已验证的 v0.1.0。
+个人迁移完整包可包含项目内已有且通过哈希验证的三个 EXE；仍需保留相应许可。它不是目前默认公共发布物。源码/文档的小改动可只同步仓库，无需重发已验证的 v0.2.0。
 
 ## 8. 常见问题
 

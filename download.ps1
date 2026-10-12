@@ -29,7 +29,7 @@ try {
     Initialize-MengrenComponents $toolRoot
     foreach ($name in @('yt-dlp.exe','ffmpeg.exe','node.exe')) {
         if (!(Test-Path -LiteralPath (Join-Path $toolRoot $name) -PathType Leaf)) {
-            throw "缺少 $name，请恢复视频下载工具文件夹。"
+            throw "缺少 $name，请恢复完整的猛人下载器文件夹。"
         }
     }
     if ($Check) {
@@ -44,7 +44,7 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.1.0（便携版）'
+        Write-Host '猛人下载器 v0.2.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-Host '请粘贴视频网页链接'
     }
@@ -52,6 +52,19 @@ try {
     $parsed = $null
     if (![Uri]::TryCreate($Url,[UriKind]::Absolute,[ref]$parsed) -or $parsed.Scheme -notin @('https','http') -or !$parsed.Host) {
         throw '请输入完整的 http 或 https 视频网页链接。'
+    }
+    $siteHost = $parsed.DnsSafeHost.ToLowerInvariant()
+    $browserSite = $siteHost -in @('weixin.qq.com','channels.weixin.qq.com') -or $siteHost -match '(^|\.)(xet\.tech|xetslk\.com|xetlk\.com|xiaoeknow\.com|xiaoe-tech\.com|xet\.citv\.cn|xet\.pomoho\.com)$'
+    if ($browserSite) {
+        Write-Host '将打开下载专用 Edge。首次使用请在原网站正常登录，之后会复用登录直到过期。'
+        if ($siteHost -in @('weixin.qq.com','channels.weixin.qq.com')) {
+            Write-Host '视频号分享链接将发给腾讯元宝解析；只发送这条链接，不发送聊天消息或转交登录信息。'
+        }
+        Write-Host '小鹅通和视频号当前下载网站提供的原始画质，不保证可以指定分辨率。'
+        $siteArgs = @((Join-Path $toolRoot 'source\site-download.mjs'),'--url',$Url,'--output',$OutputDirectory)
+        if ($Probe) { $siteArgs += '--probe' }
+        & (Join-Path $toolRoot 'node.exe') @siteArgs
+        exit $LASTEXITCODE
     }
     if (!$Quality) {
         if ($Probe) { $Quality = 'best' }

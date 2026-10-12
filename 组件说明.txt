@@ -20,3 +20,5 @@ SHA256.json 记录本包文件的 SHA-256；ZIP 外部另附压缩包 SHA-256。
 
 公开 ZIP 不含第三方 EXE；首次运行直接从上述官方项目下载并校验固定版本程序。
 本项目 MIT 许可证仅适用于自己的入口、脚本、图标和文档。
+
+站点接入规则及 API 流程部分改编自 Qiaomu Clipper（MIT）；原始许可见 licenses/qiaomu-clipper-LICENSE.txt。独立运行不要求安装剪藏。

@@ -11,7 +11,7 @@ function Receive-OfficialComponent([string]$Url, [string]$Path, [long]$Size, [st
     $request = [Net.HttpWebRequest]::Create($Url)
     $request.Timeout = 30000
     $request.ReadWriteTimeout = 30000
-    $request.UserAgent = 'MengrenDownloader/0.1.0'
+    $request.UserAgent = 'MengrenDownloader/0.2.0'
     $response = $null; $inputStream = $null; $outputStream = $null
     try {
         $response = $request.GetResponse()
