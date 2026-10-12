@@ -7,6 +7,8 @@ import {readFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {publicIp} from './relay.mjs';
+import {gunzipSync,inflateSync,brotliDecompressSync} from 'node:zlib';
+import {courseDomains,courseResponse,extractCourseMetadata,mediaIdentity,responseFileTitle} from './capture-course.mjs';
 export const captureDomains=['justkami.com','xiaoeknow.com','xiaoe-tech.com','xet.tech','xetslk.com','xetlk.com','xiaoecloud.com','douyinvod.com','bilivideo.com','bilivideo.cn','bilivideo.net','video.qq.com','aliyuncs.com','myqcloud.com','bytecdn.cn','ksyuncdn.com'];
 export const hostMatches=(host,domains)=>domains.some(d=>host===d||host.endsWith('.'+d));
 export function mediaKind(url,mime='') {
@@ -18,19 +20,34 @@ export function mediaKind(url,mime='') {
   return null;
 }
 export class CaptureCatalog {
-  constructor(){this.items=[];this.serial=0;}
+  constructor(){this.items=[];this.serial=0;this.names=new Map();}
+  clear(){this.items.length=0;this.names.clear();}
+  learn(document,allows,referer) {
+    const changed=[];
+    for(const {url,title} of extractCourseMetadata(document,allows)) {
+      const key=mediaIdentity(url);this.names.set(key,title);
+      if(this.names.size>1000)this.names.delete(this.names.keys().next().value);
+      const existing=this.items.find(item=>item.identity===key);
+      if(existing){if(existing.titleSource!=='manual'&&existing.title!==title){existing.title=title;existing.titleSource='course';changed.push(existing);}}
+      else {const kind=mediaKind(url);if(kind==='video'||kind==='hls'){const item={id:++this.serial,url,identity:key,kind,size:0,host:new URL(url).hostname,title,titleSource:'course',source:'course-list',...(referer?{referer}:{})};this.items.push(item);if(this.items.length>200)this.items.shift();changed.push(item);}}
+
+    }
+    return changed;
+  }
   observe(url,response,request={}) {
     if(![200,206].includes(response.statusCode)||!['GET','HEAD'].includes(request.method||'GET'))return null;
-    const kind=mediaKind(url,response.headers['content-type']||'');if(!kind)return null;
-    const previous=this.items.find(x=>x.url===url);if(previous)return null;
+    const kind=mediaKind(url,response.headers['content-type']||'');if(!kind||kind==='track')return null;
+    const identity=mediaIdentity(url),previous=this.items.find(x=>x.identity===identity);
     const size=Number(response.headers['content-range']?.match(/\/(\d+)$/)?.[1]||response.headers['content-length'])||0;
     const referer=request.headers?.referer;let origin;try{origin=new URL(referer).origin+'/';}catch{}
-    const item={id:++this.serial,url,kind,size,referer:origin,host:new URL(url).hostname};
+    if(previous){previous.url=url;previous.kind=kind;previous.source='playback';previous.size=Math.max(previous.size,size);if(origin)previous.referer=origin;return null;}
+    const title=this.names.get(identity)||responseFileTitle(response.headers);
+    const item={id:++this.serial,url,identity,kind,size,referer:origin,host:new URL(url).hostname,...(title?{title,titleSource:'course'}:{})};
     this.items.push(item);if(this.items.length>200)this.items.shift();return item;
   }
 }
 function cleanHeaders(headers) {const result={...headers};for(const key of ['proxy-authorization','proxy-connection','connection','upgrade','keep-alive','transfer-encoding'])delete result[key];return result;}
-export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog(),domains=captureDomains,upstream,allowLocal=false,upstreamCA,onMedia=()=>{},onDiagnostic=()=>{}}={}) {
+export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog(),domains=captureDomains,upstream,allowLocal=false,upstreamCA,metadataDomains=courseDomains,onMedia=()=>{},onTitle=()=>{},onDiagnostic=()=>{}}={}) {
   const sockets=new Set(),contexts=new Map();
   async function validateHost(host) {
     const addresses=await dns.lookup(host,{all:true,...(allowLocal&&host==='localhost'?{family:4}:{})});
@@ -80,10 +97,30 @@ export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog
     if(!range&&response.statusCode===206){response.destroy();throw Error('Only a partial track is available');}
     return result;
   }
+  function readCourseNames(response,address) {
+    if(response.statusCode!==200||!courseResponse(address,response.headers['content-type'],metadataDomains))return;
+    const encoding=String(response.headers['content-encoding']||'identity').toLowerCase();
+    if(!['identity','gzip','deflate','br'].includes(encoding))return;
+    let chunks=[],size=0,complete=false;
+    // Tee only a bounded course JSON response; keep the client's original stream
+    // and compression untouched. Credentials and full bodies are never retained.
+    response.on('data',chunk=>{size+=chunk.length;if(size<=524288)chunks.push(chunk);else chunks=[];});
+    response.on('end',()=>{complete=true;if(size>524288)return;
+      try {
+        let buffer=Buffer.concat(chunks);const options={maxOutputLength:1048576};
+        if(encoding==='gzip')buffer=gunzipSync(buffer,options);else if(encoding==='deflate')buffer=inflateSync(buffer,options);else if(encoding==='br')buffer=brotliDecompressSync(buffer,options);
+        const document=JSON.parse(buffer.toString('utf8').replace(/^\uFEFF/,''));
+        for(const item of catalog.learn(document,allows,new URL(address).origin+'/'))onTitle(item);
+      }catch{}finally{chunks=[];}
+    });
+    response.on('close',()=>{if(!complete)chunks=[];});
+  }
+  const allows=address=>{try{const u=new URL(address);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password&&hostMatches(u.hostname,domains);}catch{return false;}};
   async function forward(req,res,origin) {
     try {
       const u=new URL(req.url,origin);if(origin&&u.origin!==origin)throw Error('Target mismatch');
       const {response}=await requestURL(u.href,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req}:{})});
+      readCourseNames(response,u.href);
       const item=hostMatches(u.hostname,domains)?catalog.observe(u.href,response,req):null;if(item)onMedia(item);
       res.writeHead(response.statusCode,cleanHeaders(response.headers));response.on('error',()=>res.destroy());res.on('close',()=>response.destroy());response.pipe(res);
     }catch(error){onDiagnostic('READ '+(error.code||'FAILED'));if(!res.headersSent)res.writeHead(502,{'Content-Type':'text/plain'});res.end('Unable to read upstream. Certificate checks were retained.');}
@@ -107,5 +144,5 @@ export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog
   });
   server.on('clientError',(error,socket)=>{onDiagnostic('PARSE '+error.code);socket.destroy();});server.requestTimeout=60000;server.headersTimeout=30000;
   await new Promise((done,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',done);});
-  return {port:server.address().port,catalog,getMedia,allows:address=>{try{const u=new URL(address);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password&&hostMatches(u.hostname,domains);}catch{return false;}},close:()=>new Promise(done=>{for(const s of sockets)s.destroy();server.close(done);server.closeAllConnections();})};
+  return {port:server.address().port,catalog,getMedia,allows,close:()=>new Promise(done=>{for(const s of sockets)s.destroy();server.close(done);server.closeAllConnections();})};
 }

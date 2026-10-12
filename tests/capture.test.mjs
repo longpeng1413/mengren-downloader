@@ -1,3 +1,4 @@
+import {gzipSync,gunzipSync} from 'node:zlib';
 import test from 'node:test';import assert from 'node:assert/strict';
 import http from 'node:http';import https from 'node:https';import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';import {mkdtemp,readFile,readdir,unlink,rmdir} from 'node:fs/promises';import {join,resolve} from 'node:path';import {tmpdir} from 'node:os';import {spawnSync} from 'node:child_process';
@@ -11,8 +12,11 @@ async function tlsOnce(proxyPort,upstreamPort,host,ca){
  const secure=tls.connect({socket,servername:'localhost',ca,rejectUnauthorized:true});await new Promise((done,reject)=>{secure.once('secureConnect',done);secure.once('error',reject);});
  return await new Promise((done,reject)=>{let text='';secure.on('data',b=>text+=b.toString());secure.on('error',reject);secure.on('end',()=>done(text));secure.write('GET /video.mp4 HTTP/1.1\r\nHost: '+host+':'+upstreamPort+'\r\nConnection: close\r\n\r\n');});
 }
-async function throughTLS(...args){for(let i=0;i<5;i++){try{return await tlsOnce(...args);}catch(e){if(i===4||!['ECONNRESET','EPIPE'].includes(e.code))throw e;}}}
+async function throughTLS(...args){for(let i=0;i<5;i++){try{return await tlsOnce(...args);}catch(e){if(i===4||!['ECONNRESET','EPIPE'].includes(e.code))throw e;await new Promise(done=>setTimeout(done,200));}}}
 async function plainCapture(port,address){for(let i=0;i<6;i++){try{await new Promise((done,reject)=>{http.get({host:'127.0.0.1',port,path:address,agent:false,headers:{Cookie:'fixture-only'}},r=>{if(r.statusCode!==200){r.resume();reject(Error('HTTP fixture transport failed'));return;}r.resume();r.on('end',done);r.on('error',reject);}).on('error',reject);});return;}catch(e){if(i===5)throw e;await new Promise(done=>setTimeout(done,100));}}}
+async function fetchPlain(proxyPort,address){
+ for(let i=0;i<6;i++){try{return await new Promise((done,reject)=>{const req=http.get({host:'127.0.0.1',port:proxyPort,path:address,agent:false,timeout:10000},r=>{if(r.statusCode!==200){r.resume();reject(Error('Fixture transport HTTP '+r.statusCode));return;}const chunks=[];r.on('data',b=>chunks.push(b));r.on('end',()=>done(Buffer.concat(chunks)));r.on('error',reject);});req.on('timeout',()=>req.destroy(Error('Fixture transport timeout')));req.on('error',reject);});}catch(error){if(i===5)throw error;await new Promise(done=>setTimeout(done,100));}}
+}
 test('Media candidates never retain login headers and repeated ranges deduplicate',()=>{
  const c=new CaptureCatalog(),u='https://file.justkami.com/video.mp4?signature=fixture';
  c.observe(u,{statusCode:206,headers:{'content-type':'video/mp4','content-range':'bytes 0-99/1000'}},{method:'GET',headers:{cookie:'private',authorization:'private',referer:'https://m.justkami.com/course?token=private'}});
@@ -33,16 +37,19 @@ test('HTTP/HTTPS media capture, non-media TLS tunnel and full download work with
   const localCA=new X509Certificate(await readFile(join(folder,'root.cer'))).toString(),originCA=new X509Certificate(await readFile(join(upstreamFolder,'root.cer'))).toString();
   const video=join(folder,'video.mp4');const ff=spawnSync(resolve('ffmpeg.exe'),['-v','error','-f','lavfi','-i','color=c=black:s=64x64:r=10','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','1','-c:v','libx264','-c:a','aac','-movflags','+faststart',video],{windowsHide:true,encoding:'utf8'});assert.equal(ff.status,0,ff.stderr);
   const bytes=await readFile(video);let hadCookie=false;
-  const handler=(req,res)=>{hadCookie ||= Boolean(req.headers.cookie);if(req.url==='/fixture'){const body='#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1.0,\nvideo.mp4\n#EXT-X-ENDLIST\n';res.writeHead(200,{'Content-Type':'application/vnd.apple.mpegurl'});res.end(body);return;}res.writeHead(200,{'Content-Type':'video/mp4','Content-Length':bytes.length});res.end(bytes);};
+  const handler=(req,res)=>{hadCookie ||= Boolean(req.headers.cookie);if(req.url==='/video/detail'){const body=gzipSync(JSON.stringify({data:{videoName:'1. 峰级线基础画法',videoUrl:'http://'+req.headers.host+'/video.mp4'},user:{name:'private fixture account'}}));res.writeHead(200,{'Content-Type':'application/json','Content-Encoding':'gzip','Content-Length':body.length});res.end(body);return;}if(req.url==='/fixture'){const body='#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1.0,\nvideo.mp4\n#EXT-X-ENDLIST\n';res.writeHead(200,{'Content-Type':'application/vnd.apple.mpegurl'});res.end(body);return;}res.writeHead(200,{'Content-Type':'video/mp4','Content-Length':bytes.length});res.end(bytes);};
   server=http.createServer(handler);secureServer=https.createServer({pfx,passphrase:''},handler);const plainPort=await listen(server),securePort=await listen(secureServer);
-  proxy=await createCaptureProxy({data:folder,helper,domains:['localhost'],allowLocal:true,upstreamCA:[originCA],onDiagnostic:msg=>console.log('TEST '+msg)});
+  proxy=await createCaptureProxy({data:folder,helper,domains:['localhost'],allowLocal:true,metadataDomains:['localhost'],upstreamCA:[originCA],onDiagnostic:msg=>console.log('TEST '+msg)});
   const address='http://localhost:'+plainPort+'/video.mp4';
   await plainCapture(proxy.port,address);assert.equal(hadCookie,true);assert.equal(proxy.catalog.items.length,1);console.log('HTTP capture stage passed');
+  const metadata=await fetchPlain(proxy.port,'http://localhost:'+plainPort+'/video/detail');
+  assert.equal(JSON.parse(gunzipSync(metadata)).data.videoName,'1. 峰级线基础画法');assert.equal(proxy.catalog.items[0].title,'1. 峰级线基础画法');assert.equal(JSON.stringify([...proxy.catalog.names.values()]).includes('private fixture'),false);
+
   const text=await throughTLS(proxy.port,securePort,'localhost',localCA);assert.ok(text.startsWith('HTTP/1.1 200'));assert.equal(proxy.catalog.items.length,2);console.log('HTTPS capture stage passed');
   const tunneled=await throughTLS(proxy.port,securePort,'127.0.0.1',originCA);assert.ok(tunneled.startsWith('HTTP/1.1 200'));assert.equal(proxy.catalog.items.length,2);
   hadCookie=false;
-  const result=await downloadResolved({site:'capture',title:'Capture fixture',page:address,mediaUrl:address,requireAudio:true},address,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia}});
-  assert.equal(hadCookie,false);const decoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',result.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(decoded.status,0,decoded.stderr);
+  const result=await downloadResolved({site:'capture',title:'1. 峰级线基础画法',fileNameStyle:'title',page:address,mediaUrl:address,requireAudio:true},address,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia}});
+  assert.ok(result.file.endsWith('1. 峰级线基础画法.mp4'));assert.equal(hadCookie,false);const decoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',result.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(decoded.status,0,decoded.stderr);
   const playlist='http://localhost:'+plainPort+'/fixture';
   const hls=await downloadResolved({site:'capture',title:'Extensionless HLS capture fixture',page:playlist,mediaUrl:playlist,requireAudio:true},playlist,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia,playlist:true}});
   const hlsDecoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',hls.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(hlsDecoded.status,0,hlsDecoded.stderr);

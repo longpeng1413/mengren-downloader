@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-alpha.2-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-alpha.3-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -146,7 +146,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Quality 48
 - 当前小鹅通/视频号下载网站提供的原始源，不承诺清晰度档位。主要目标是已结束直播回放与腾讯官方可解析分享链接，不涵盖所有课程类型或视频号。
 
 ```powershell
-.\node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs
+.\node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs tests/capture-menu.test.mjs
 # 只验证指定平台来源：仍会打开原网站并等待用户正常登录
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url '用户选择的平台分享链接'
 ```
@@ -195,7 +195,14 @@ source/capture.mjs 是交互入口；capture-proxy.mjs 使用 Node 内置 HTTP/T
 Windows代理变更先保存日志，退出时只在设置仍属于本软件时恢复；其他应用改过代理时拒绝覆盖并保留备份。正常退出及后台守护都会尝试移除本程序证书信任。恢复网络.cmd 仅恢复本程序记录，不删除其他软件证书或改第三方配置。
 CI 测试使用临时独立证书、进程内部指定 CA、隔离注册表测试路径；不安装 CurrentUser Root 证书，不修改真实系统代理。测试涵盖 HTTP/HTTPS 抓取、其他域名隧道、Cookie 不复制、完整 MP4/HLS 下载解码、无效上游 CA 拒绝、恢复及外部改动冲突。实际微信/Cami权限、某些程序的证书固定/QUIC代理行为、强制关闭窗口守护必须在有权限的用户环境另测，不用本地 fixture 代替。
 
-## 完整测试包（0.4.0-alpha.2）
+## 完整测试包（0.4.0-alpha.3）
 
-用户明确要求下载解压即可测试，不再让用户首次另下下载组件。准备环境后运行 scripts/build.ps1 -Package -FullPackage，构建前校验三个现有 EXE 的锁定哈希；缺失或错误时拒绝打包。完整包名 mengren-downloader-0.4.0-alpha.2-windows-x64-full.zip，摘要 SHA256SUMS-full.txt，原始许可/官方来源说明随包提供。
+用户明确要求下载解压即可测试，不再让用户首次另下下载组件。准备环境后运行 scripts/build.ps1 -Package -FullPackage，构建前校验三个现有 EXE 的锁定哈希；缺失或错误时拒绝打包。完整包名 mengren-downloader-0.4.0-alpha.3-windows-x64-full.zip，摘要 SHA256SUMS-full.txt，原始许可/官方来源说明随包提供。
 开发用 -Package 小包继续保留，便于初次源码环境准备；正式测试 Release 优先上传 full 包并在 README 给出准确文件名。不得上传个人浏览器会话、CA/私钥或网络恢复备份。跨电脑解压启动检查必须验证不触发组件下载；不把“组件齐全”当作真实咖米课程已验证。
+
+## 课程命名与抓取批量队列（0.4.0-alpha.3）
+
+source/capture-course.mjs 只从限定课程域名和课程路径的 JSON 响应提取与媒体 URL 明确关联的标题；不按时间/响应顺序猜测名称，不解析登录/账户接口。最多缓存 512 KiB 压缩响应，解压上限 1 MiB；客户端继续收到未修改的原响应。只保留媒体关联和标题，不保留完整 JSON、个人字段或登录头。Content-Disposition 原文件名也可提供标题。课程名未知时必须由用户填写；“命名 编号 名称”覆盖自动名。
+source/capture-menu.mjs 实现数字、范围、多编号和“全部”顺序队列。输入时固定课程集合，允许同一媒体更新的签名用于后续下载；新候选不会悄悄加入活动队列。某项失败继续下一项，已成功项不会再被“全部”选择。课程 JSON 同时提供名称和明确的 MP4/HLS 地址时可生成待验证候选；下载后才算成功。没有盲目目录爬取，不得宣称所有专栏只打开首页即能下载全集。
+抓取文件使用课程标题，不加地址哈希；小鹅通也使用课程标题（保留其中原有日期）；其他平台原命名保持。相同目录的临时 MP4 验证后以排他硬链接发布，不重复复制大视频；不支持硬链接的文件系统采用排他复制。已有同名文件使用 (2)、(3)，不得覆盖用户文件。回归包含并发保存冲突、压缩课程 JSON 原样转发、标题绑定、手动名优先、未知名取消、范围验证和批量失败继续。
+用户已报告笔记本小程序抓取单视频成功；新标题字段兼容和 8 节真实队列仍待用户验证，不能用 fixture 代替。

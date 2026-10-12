@@ -1,8 +1,9 @@
 import {spawn} from 'node:child_process';
-import {mkdir,mkdtemp,readFile,readdir,unlink,rmdir,rename,access} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,readdir,unlink,rmdir,link,copyFile} from 'node:fs/promises';
 import {dirname,join,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {constants} from 'node:fs';
 import {resolveSource} from './source-resolver.mjs';
 import {createRelay} from './relay.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
@@ -43,10 +44,23 @@ async function cleanup(job,output) {
   }
   await rmdir(job).catch(()=>{});
 }
-function fileName(title,address) {
-  let name=String(title||'视频').replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').replace(/[. ]+$/,'').trim().slice(0,110);
+export function videoFileName(title,address,{titleOnly=false}={}) {
+  let name=String(title||'视频').replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').trim().slice(0,110).replace(/[. ]+$/,'');
   if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name='视频 '+name;
-  return name+' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+'].mp4';
+  return name+(titleOnly?'':' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+']')+'.mp4';
+}
+export async function saveCompleted(source,output,name) {
+  // Same-filesystem hard linking publishes the validated file without copying a
+  // large video or replacing an existing user file. FAT/exotic filesystems fall back.
+  const stem=name.replace(/\.mp4$/i,'');
+  for(let index=1;index<=10000;index++) {
+    const target=join(output,index===1?name:stem+' ('+index+').mp4');
+    try {
+      try{await link(source,target);}catch(error){if(!['EPERM','ENOSYS','ENOTSUP','EOPNOTSUPP','EXDEV','EINVAL'].includes(error.code))throw error;await copyFile(source,target,constants.COPYFILE_EXCL);}
+      return target;
+    }catch(error){if(error.code!=='EEXIST')throw error;}
+  }
+  throw Error('同名视频过多，请更改课程名称或保存目录');
 }
 export async function downloadSite(address,output,{probe=false,quality='best',timeout}={}) {
   const info=await resolveSource(address,{timeout,notify:message,isCancelled:()=>cancelled,quality});
@@ -89,9 +103,8 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,...(soundPath?['-i',soundPath]:[]),'-map','0:v:0','-map',soundPath?'1:a:0':'0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
         if(mux.code!==0) throw new Error('MP4 合并失败，没有保存为成功结果');
         await validate(merged,{requireAudio:Boolean(info.requireAudio)});
-        let target=join(outputPath,fileName(info.title,address));
-        try {await access(target);target=target.replace(/\.mp4$/,`-${Date.now()}.mp4`);} catch { }
-        await rename(merged,target);message('下载完成：'+target);return {site:info.site,title:info.title,file:target};
+        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,address,{titleOnly:info.fileNameStyle==='title'||info.site==='xiaoe'}));
+        message('下载完成：'+target);return {site:info.site,title:info.title,file:target};
       } catch(error) {
         if(cancelled) throw new Error('下载已取消');
         lastError=error;
