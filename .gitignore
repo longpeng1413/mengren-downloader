@@ -18,3 +18,6 @@
 *.pfx
 *.cer
 *.pem
+
+# Claude Code 本机权限设置，只在这台电脑生效
+/.claude/settings.local.json
