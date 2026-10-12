@@ -94,5 +94,5 @@ export async function createRelay(site,media,referer,options={}) {
   });
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
   port=server.address().port;
-  return {url:register(media,site==='xiaoe'),close:()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();})};
+  return {url:register(media,site==='xiaoe'||options.playlist===true),close:()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();})};
 }

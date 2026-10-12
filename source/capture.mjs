@@ -46,7 +46,7 @@ async function main(output){
       if(input==='清空'){proxy.catalog.items.length=0;console.log('已清空候选，请只播放要下载的那一个视频。');continue;}
       const item=proxy.catalog.items.find(x=>String(x.id)===input);if(!item){console.log('请输入候选编号、列表、清空，或直接回车返回。');continue;}
       if(item.kind==='track'){console.log('这是音频或独立片段，不作为完整视频下载；请寻找视频或分段视频清单。');continue;}
-      try{const title='抓取视频 '+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);await downloadResolved({site:'capture',title,page:item.referer||item.url,mediaUrl:item.url,requireAudio:true},item.url,output,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia}});}catch(error){console.log('未保存为成功结果：'+String(error.message).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]'));console.log('可重新播放后选新编号；受保护、仅片段、独立音轨或必须携带登录凭证的地址暂不保证。');}
+      try{const title='抓取视频 '+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);await downloadResolved({site:'capture',title,page:item.referer||item.url,mediaUrl:item.url,requireAudio:true},item.url,output,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia,playlist:item.kind==='hls'}});}catch(error){console.log('未保存为成功结果：'+String(error.message).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]'));console.log('可重新播放后选新编号；受保护、仅片段、独立音轨或必须携带登录凭证的地址暂不保证。');}
     }
   }finally{await cleanup();}
 }

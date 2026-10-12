@@ -12,6 +12,7 @@ export const hostMatches=(host,domains)=>domains.some(d=>host===d||host.endsWith
 export function mediaKind(url,mime='') {
   const path=new URL(url).pathname.toLowerCase();mime=mime.toLowerCase().split(';')[0];
   if(/\.m3u8$/.test(path)||mime.includes('mpegurl'))return 'hls';
+  if(/\.(m4s|ts)$/.test(path))return 'track';
   if(/\.(mp4|webm|mkv|mov|flv)$/.test(path)||mime.startsWith('video/')&&!/mp2t/.test(mime))return 'video';
   if(/\.(m4a|aac|mp3|m4s|ts)$/.test(path)||mime.startsWith('audio/'))return 'track';
   return null;
