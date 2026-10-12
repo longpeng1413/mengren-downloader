@@ -23,6 +23,9 @@ jobs:
         run: |
           & ./node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Site tests failed' }
+      - name: Build complete test package
+        shell: powershell
+        run: ./scripts/build.ps1 -Package -FullPackage
       - uses: actions/upload-artifact@v4
         with:
           name: mengren-downloader-windows-x64

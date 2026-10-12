@@ -6,19 +6,19 @@ https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19
 源码：https://github.com/yt-dlp/yt-dlp/tree/2026.08.19
 Windows 打包程序包含 GPLv3+ 组件；另附原项目和第三方许可证。
 
-FFmpeg 7.1：已有 imageio-ffmpeg 包内的 Gyan essentials 静态 Windows x64 程序，GPLv3+。
+FFmpeg 7.1：Gyan 官方 essentials 静态 Windows x64 程序，GPLv3+。
 https://www.gyan.dev/ffmpeg/builds/
-源码：https://github.com/FFmpeg/FFmpeg/tree/n7.1
+源码：https://github.com/FFmpeg/FFmpeg/tree/b08d7969c5
 此副本用于合并音视频，不需要另装系统 ffmpeg。
 
-Node.js v24.19.0：已有本机运行组件中的 Windows x64 程序。
+Node.js v24.19.0：Node.js 官方 Windows x64 程序。
 https://nodejs.org/
 源码：https://github.com/nodejs/node/tree/v24.19.0
 Node 的许可证及第三方声明见 licenses/node-LICENSE.txt。
 
-SHA256.json 记录本包文件的 SHA-256；ZIP 外部另附压缩包 SHA-256。
+dependencies.json 记录固定组件的官方来源、版本及 EXE SHA-256；ZIP 外部另附 SHA256SUMS-full.txt。
 
-公开 ZIP 不含第三方 EXE；首次运行直接从上述官方项目下载并校验固定版本程序。
+0.4.0-alpha.2 完整测试包已包含 yt-dlp.exe、ffmpeg.exe、node.exe，无需用户额外准备组件。它们均为未修改的官方程序，SHA-256 与 dependencies.json 一致；第三方许可见 licenses。源代码分别从上述官方版本链接提供。开发用小包缺少组件时会自动从官方准备。
 本项目 MIT 许可证仅适用于自己的入口、脚本、图标和文档。
 
 站点接入规则及 API 流程部分改编自 Qiaomu Clipper（MIT）；原始许可见 licenses/qiaomu-clipper-LICENSE.txt。独立运行不要求安装剪藏。

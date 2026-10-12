@@ -4,14 +4,14 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.4.0-alpha.1 抓取测试版** 使用命令行窗口交互，支持 YouTube、B 站、抖音，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.4.0-alpha.2 抓取测试版** 使用命令行窗口交互，支持 YouTube、B 站、抖音，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-到 [v0.4.0-alpha.1 试用版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.4.0-alpha.1) 下载 `mengren-downloader-0.4.0-alpha.1-windows-x64.zip`。
+到 [v0.4.0-alpha.2 试用版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.4.0-alpha.2) 下载 `mengren-downloader-0.4.0-alpha.2-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
-2. 双击 **猛人下载器.exe**。首次运行会自动从官方准备并校验下载组件，约 194 MiB，只需一次。
+2. 双击 **猛人下载器.exe**。完整测试包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。
 3. 粘贴视频链接。YouTube、B 站可以选择最高画质、1080P、720P 或 480P；小鹅通/视频号/抖音按网页提供的画质下载。
 4. 等待视频、音频下载及合并，完成后到当前电脑的系统 **下载** 文件夹查看。
 5. 窗口会再次提示粘贴链接：输入新链接继续下载，**不输入内容、直接回车就退出**。失败后也可换链接或重试；每个新任务重新选择画质。
@@ -47,7 +47,7 @@ YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P
 ## 运行要求与范围
 
 - Windows 10 / 11，64 位 Intel 或 AMD 电脑。
-- 无需安装 Python、Node.js、剪藏插件或剪藏助手，也无需管理员权限。
+- 无需安装 Python、Node.js、剪藏插件或剪藏助手。需要 Windows 自带或已安装的 .NET Framework 4.8；抓取证书只作用于当前 Windows 用户。
 - 网络需要能访问目标视频平台和首次准备组件的官方站点。小鹅通/视频号/抖音及 B 站网页备用路径还需要已安装的 Microsoft Edge。代理设置不会跨电脑复制。
 - 默认使用系统下载目录，视频和音频自动合并，通常为 MP4，部分格式为 MKV。
 - 不自动读取浏览器 Cookie。部分需要登录、受地区限制或 DRM 保护的视频可能无法下载。
@@ -72,10 +72,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1
 Windows 自带 .NET Framework 编译器即可构建：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Package
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Package -FullPackage
 ```
 
-生成的便携 ZIP 位于 `dist`。构建不需要预先安装下载组件；公开 ZIP 只包含本项目入口、源码、图标和说明。用户初次运行时直接从上游获取组件并检查 SHA-256。
+生成的便携 ZIP 位于 `dist`。开发用小包构建不需要预先安装下载组件；完整包构建前须运行开发准备入口。完整发布包附带下载组件及第三方许可；开发用小包缺少组件时会自动获取并校验。
 
 ```powershell
 .\猛人下载器.exe --check
@@ -92,7 +92,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Packa
 - [Node.js](https://nodejs.org/)：YouTube JS 解析、本机浏览器连接和媒体下载桥接。
 - 部分站点规则/API 流程改编自 [Qiaomu Clipper](https://github.com/joeseesun/qiaomu-clipper)，已保留 [原始 MIT 许可](licenses/qiaomu-clipper-LICENSE.txt)；运行不依赖剪藏软件。
 
-公开发布包不包含这些第三方程序，首次运行直接从官方来源获取未修改的程序，许可证文本附在 `licenses`。
+完整测试包包含这三个未修改的官方程序，版本和哈希见 `dependencies.json`，各自许可和来源见 `licenses`、[组件说明](组件说明.txt)。本项目 MIT 许可不覆盖第三方程序。开发用小包保留自动初始化功能。
 
 ## 后续计划
 

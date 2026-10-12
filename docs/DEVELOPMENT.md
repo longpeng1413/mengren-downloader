@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.4.0-alpha.1-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-alpha.2-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -172,10 +172,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 1. 核实授权范围，完成构建和验证；维护 `docs/PROJECT_STATUS.md`。
 2. 同步 `Launcher.cs` 的 AssemblyVersion/FileVersion/标题，`download.ps1` 的显示版本，`bootstrap.ps1` 的 UserAgent，`scripts/build.ps1` 的产物名、README/使用说明版本。依赖版本只在确需升级时调整。
 3. 提交源码，推送已授权的分支，等待 Windows Actions 成功；若需 PR，明确最终范围。
-4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件，不上传个人完整包。
+4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件；完整测试包可包含已校验的官方组件，不得上传本机私人配置/登录状态。
 5. 核对 GitHub Release 是否公开、是否正确标为稳定/预发布、资产名/大小/摘要和源码提交关系。
 
-个人迁移完整包可包含项目内已有且通过哈希验证的三个 EXE；仍需保留相应许可。它不是目前默认公共发布物。源码/文档的小改动可只同步仓库，无需重发已验证版本。
+用户已要求完整测试版作为下载入口，使用标准 FullPackage 构建，保留许可及官方来源。不要把个人目录直接压缩发布；本机私钥、浏览器配置和网络恢复记录必须排除。源码/文档的小改动可只同步仓库，无需重发已验证版本。
 
 ## 8. 常见问题
 
@@ -194,3 +194,8 @@ source/capture.mjs 是交互入口；capture-proxy.mjs 使用 Node 内置 HTTP/T
 代理只转发原请求，不记录正文、Cookie、Authorization；候选只保留本次内存的 URL、类型、大小、来源 origin。完整下载只重用媒体 URL 和 origin，不复制登录头。m3u8 使用既有受限中继重写片段/密钥，受保护格式拒绝；捕获结果要求视频+音轨，不把独立片段发布成完整视频。
 Windows代理变更先保存日志，退出时只在设置仍属于本软件时恢复；其他应用改过代理时拒绝覆盖并保留备份。正常退出及后台守护都会尝试移除本程序证书信任。恢复网络.cmd 仅恢复本程序记录，不删除其他软件证书或改第三方配置。
 CI 测试使用临时独立证书、进程内部指定 CA、隔离注册表测试路径；不安装 CurrentUser Root 证书，不修改真实系统代理。测试涵盖 HTTP/HTTPS 抓取、其他域名隧道、Cookie 不复制、完整 MP4/HLS 下载解码、无效上游 CA 拒绝、恢复及外部改动冲突。实际微信/Cami权限、某些程序的证书固定/QUIC代理行为、强制关闭窗口守护必须在有权限的用户环境另测，不用本地 fixture 代替。
+
+## 完整测试包（0.4.0-alpha.2）
+
+用户明确要求下载解压即可测试，不再让用户首次另下下载组件。准备环境后运行 scripts/build.ps1 -Package -FullPackage，构建前校验三个现有 EXE 的锁定哈希；缺失或错误时拒绝打包。完整包名 mengren-downloader-0.4.0-alpha.2-windows-x64-full.zip，摘要 SHA256SUMS-full.txt，原始许可/官方来源说明随包提供。
+开发用 -Package 小包继续保留，便于初次源码环境准备；正式测试 Release 优先上传 full 包并在 README 给出准确文件名。不得上传个人浏览器会话、CA/私钥或网络恢复备份。跨电脑解压启动检查必须验证不触发组件下载；不把“组件齐全”当作真实咖米课程已验证。
