@@ -7,7 +7,7 @@
 | 条件 | 用途与准备方式 |
 | --- | --- |
 | Windows 10/11，Intel/AMD x64 | 当前程序及三个下载组件的目标平台；macOS、Linux、ARM64 未支持 |
-| 可写的项目文件夹 | 例如 `D:\猛人下载器`；路径可包含中文和空格，不要求 D 盘存在 |
+| 可写的项目文件夹 | 例如 `D:\mengren-downloader`；路径可包含中文和空格，不要求 D 盘存在 |
 | Windows PowerShell 5.1 | Windows 自带；运行基线。PowerShell 7 可辅助编辑，但不能替代 5.1 验证 |
 | Windows .NET Framework 4.x 编译器 | 必须存在 `%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`；现代 .NET SDK 不替代此文件 |
 | Git for Windows | 获取源码、版本控制和远端同步。建议使用官方受维护版本 |
@@ -34,8 +34,8 @@ winget install --id Git.Git -e --source winget
 推荐使用 Git 克隆，而非仅下载 GitHub 的源码 ZIP：源码 ZIP 没有 `.git`，不会自动成为同步目录。
 
 ```powershell
-git clone https://github.com/longpeng1413/mengren-downloader.git 'D:\猛人下载器'
-Set-Location -LiteralPath 'D:\猛人下载器'
+git clone https://github.com/longpeng1413/mengren-downloader.git 'D:\mengren-downloader'
+Set-Location -LiteralPath 'D:\mengren-downloader'
 git status --short
 git remote -v
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1
@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-alpha.4-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -175,7 +175,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件；完整测试包可包含已校验的官方组件，不得上传本机私人配置/登录状态。
 5. 核对 GitHub Release 是否公开、是否正确标为稳定/预发布、资产名/大小/摘要和源码提交关系。
 
-用户已要求完整测试版作为下载入口，使用标准 FullPackage 构建，保留许可及官方来源。不要把个人目录直接压缩发布；本机私钥、浏览器配置和网络恢复记录必须排除。源码/文档的小改动可只同步仓库，无需重发已验证版本。
+用户已要求完整便携正式版作为下载入口，使用标准 FullPackage 构建，保留许可及官方来源。不要把个人目录直接压缩发布；本机私钥、浏览器配置和网络恢复记录必须排除。源码/文档的小改动可只同步仓库，无需重发已验证版本。
 
 ## 8. 常见问题
 
@@ -197,18 +197,24 @@ CI 测试使用临时独立证书、进程内部指定 CA、隔离注册表测�
 
 ## 完整测试包（0.4.0-alpha.4）
 
-用户明确要求下载解压即可测试，不再让用户首次另下下载组件。准备环境后运行 scripts/build.ps1 -Package -FullPackage，构建前校验三个现有 EXE 的锁定哈希；缺失或错误时拒绝打包。完整包名 mengren-downloader-0.4.0-alpha.4-windows-x64-full.zip，摘要 SHA256SUMS-full.txt，原始许可/官方来源说明随包提供。
-开发用 -Package 小包继续保留，便于初次源码环境准备；正式测试 Release 优先上传 full 包并在 README 给出准确文件名。不得上传个人浏览器会话、CA/私钥或网络恢复备份。跨电脑解压启动检查必须验证不触发组件下载；不把“组件齐全”当作真实咖米课程已验证。
+用户明确要求下载解压即可测试，不再让用户首次另下下载组件。准备环境后运行 scripts/build.ps1 -Package -FullPackage，构建前校验三个现有 EXE 的锁定哈希；缺失或错误时拒绝打包。完整包名 mengren-downloader-0.4.0-windows-x64-full.zip，摘要 SHA256SUMS-full.txt，原始许可/官方来源说明随包提供。
+开发用 -Package 小包继续保留，便于初次源码环境准备；正式 Release 优先上传 full 包并在 README 给出准确文件名。不得上传个人浏览器会话、CA/私钥或网络恢复备份。跨电脑解压启动检查必须验证不触发组件下载；不把“组件齐全”当作真实咖米课程已验证。
 
 ## 课程命名与抓取批量队列（0.4.0-alpha.4）
 
 source/capture-course.mjs 只从限定课程域名和课程路径的 JSON 响应提取与媒体 URL 明确关联的标题；不按时间/响应顺序猜测名称，不解析登录/账户接口。最多缓存 512 KiB 压缩响应，解压上限 1 MiB；客户端继续收到未修改的原响应。只保留媒体关联和标题，不保留完整 JSON、个人字段或登录头。Content-Disposition 原文件名也可提供标题。课程名未知时必须由用户填写；“命名 编号 名称”覆盖自动名。
 source/capture-menu.mjs 实现数字、范围、多编号和“全部”顺序队列。输入时固定课程集合，允许同一媒体更新的签名用于后续下载；新候选不会悄悄加入活动队列。某项失败继续下一项，已成功项不会再被“全部”选择。课程 JSON 同时提供名称和明确的 MP4/HLS 地址时可生成待验证候选；下载后才算成功。没有盲目目录爬取，不得宣称所有专栏只打开首页即能下载全集。
 抓取文件使用课程标题，不加地址哈希；小鹅通也使用课程标题（保留其中原有日期）；其他平台原命名保持。相同目录的临时 MP4 验证后以排他硬链接发布，不重复复制大视频；不支持硬链接的文件系统采用排他复制。已有同名文件使用 (2)、(3)，不得覆盖用户文件。回归包含并发保存冲突、压缩课程 JSON 原样转发、标题绑定、手动名优先、未知名取消、范围验证和批量失败继续。
-用户已报告笔记本小程序抓取单视频成功；新标题字段兼容和 8 节真实队列仍待用户验证，不能用 fixture 代替。
+用户于 2026-10-12 反馈在笔记本测试当前版本可用，已授权转为正式版；31 项回归覆盖命名和队列。用户真实反馈不能扩张为所有课程字段均已验证。
 
 ## 名称晚到与下载指令（0.4.0-alpha.4）
 
 用户实际截图显示：输入“全部”后进入缺失名称的自由输入框，名称后台识别成功也未退出该输入框，第二次“全部”被接到用户已输入的 13. 后作为名称；当时队列显示 [1/5]，批量本身已经入队。修复取消嵌套自由名称问答；选中项目有缺失名称时队列不开始，返回唯一操作提示，等待名称补齐后重新输入指令或显式“命名 编号 名称”。批量三个别名全部/全部下载/下载全部均支持。命名指令拒绝操作词及纯编号（包括编号前缀+全部），避免误命名。候选集合固定，每项开始时取得已绑定的最新标题与媒体地址。回归精确重现 13-17 名称晚到、重复全部和 13.全部 输入，断言全部五项使用正确课程名。
 
 抓取文件添加两位起步课程序号前缀（01. 名称.mp4）。只读取明确 lessonNumber/lessonNo/lessonOrder/videoNo/videoOrder 等正整数课程序号；不把任意 index、sort、时间或捕获队列名次猜为官方课程序号。官网未提供则回退本次候选编号（采集顺序），部分队列不从1重编。序号 编号 原课程序号支持手动校正，独立于手动标题且不被晚到的官网数据覆盖。普通小鹅通单链接文件仍保留原名和日期，不加采集序号。
+
+## v0.4.0 正式版与英文开发目录
+
+用户已确认 v0.4.0-alpha.4 实际测试可用并要求正式发布。v0.4.0 保持同样的功能/依赖，仅更新当前版本标识、说明、发布入口与验证状态，旧预发布 tag/资产保持不变。正式包为 mengren-downloader-0.4.0-windows-x64-full.zip，包含全部组件；常规用户无需运行“准备开发环境”。
+本机正式 Git 开发目录已由用户明确要求改为 D:\mengren-downloader，与 GitHub 仓库同名；Git 历史、remote 和所有忽略文件完整保留，原指向旧目录的桌面快捷方式已更新。软件中文名称仍为猛人下载器。新电脑不要求 D 盘，克隆目录可自定；操作始终以当前 repo 证据为准。
+历史 alpha 段落描述当时的修复过程；当前验证状态以正式版记录为准。强制退出/断电恢复、所有课程/平台格式不在用户本次验收保证范围内。

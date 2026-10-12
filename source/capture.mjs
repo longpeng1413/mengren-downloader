@@ -19,7 +19,7 @@ export function parseUpstream(backup) {
 }
 async function main(output){
   if(process.platform!=='win32'||!process.env.LOCALAPPDATA)throw Error('抓取模式需要 Windows 当前用户环境');
-  console.log('\n猛人下载器：播放抓取模式（试用）');
+  console.log('\n猛人下载器：播放抓取模式');
   console.log('开启后临时修改当前用户的系统代理，并信任本机生成的抓取证书。其他电脑会生成自己的证书，不携带登录状态。');
   console.log('只解读课程及常见媒体域名，仅临时读取课程响应中的名称与媒体关联，不保存完整响应、请求正文、Cookie 或登录凭证。微信登录/聊天/支付域名只转发加密连接。');
   console.log('原代理会保存并尽量复用；退出自动恢复。遇到异常可双击“恢复网络.cmd”。其他软件中途改了代理时不会强行覆盖。');
