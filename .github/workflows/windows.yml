@@ -21,7 +21,7 @@ jobs:
       - name: Site integration regression tests
         shell: pwsh
         run: |
-          & ./node.exe --test tests/sites.test.mjs
+          & ./node.exe --test tests/sites.test.mjs tests/session.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Site tests failed' }
       - uses: actions/upload-artifact@v4
         with:

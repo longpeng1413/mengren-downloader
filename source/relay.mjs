@@ -52,7 +52,7 @@ export async function createRelay(site,media,referer) {
   function register(address,playlist=false) {
     if(!allowedMedia(site,address) || resources.size>100000) throw new Error('媒体清单含不允许的地址');
     playlist=playlist || /\.m3u8$/i.test(new URL(address).pathname);
-    const path=`/${token}/${createHash('sha256').update(String(playlist)+address).digest('hex')}${playlist?'.m3u8':site==='channels'?'.mp4':''}`;
+    const path=`/${token}/${createHash('sha256').update(String(playlist)+address).digest('hex')}${playlist?'.m3u8':site!=='xiaoe'?'.mp4':''}`;
     resources.set(path,{address,playlist});return `http://127.0.0.1:${port}${path}`;
   }
   const server=http.createServer(async (request,result)=>{
@@ -62,7 +62,7 @@ export async function createRelay(site,media,referer) {
     if(range && !/^bytes=\d+-\d*$/.test(range)) {result.writeHead(416);result.end();return;}
     try {
       const {response,address}=await guardedGet(site,resource.address,referer,range);
-      if(site==='channels') {
+      if(site!=='xiaoe') {
         const limit=20*1024*1024*1024, expected=Number(response.headers['content-length'])||0;
         if(expected>limit) {response.destroy();throw new Error('视频超过当前大小限制');}
         const headers={'Content-Type':response.headers['content-type']||'video/mp4'};

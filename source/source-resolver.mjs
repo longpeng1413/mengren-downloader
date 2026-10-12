@@ -1,11 +1,34 @@
 import {ensureBrowser,sleep} from './browser.mjs';
-import {isXiaoe,xiaoeAddress,channelsShare,isPlayback,allowedMedia,xiaoeProbeExpression,channelsProbeExpression,playbackProbeExpression} from './sites.mjs';
-export async function resolveSource(address,{timeout=600000,notify=()=>{},isCancelled=()=>false}={}) {
-  const share=channelsShare(address),site=isXiaoe(address)?'xiaoe':share?'channels':null;
-  if(!site) throw new Error('不是受支持的小鹅通或视频号链接');
+import {isXiaoe,xiaoeAddress,channelsShare,isPlayback,allowedMedia,xiaoeProbeExpression,channelsProbeExpression,playbackProbeExpression,douyinAddress,biliAddress,browserMediaAllowed,douyinProbeExpression,biliProbeExpression} from './sites.mjs';
+export async function resolveSource(address,{timeout=600000,notify=()=>{},isCancelled=()=>false,quality='best'}={}) {
+  const share=channelsShare(address),site=isXiaoe(address)?'xiaoe':share?'channels':douyinAddress(address)?'douyin':biliAddress(address)?'bili':null;
+  if(!site) throw new Error('不是受支持的网站视频链接');
   const browser=await ensureBrowser(), deadline=Date.now()+timeout;
   try {
-    if(site==='xiaoe') {
+    if(site==='douyin'||site==='bili') {
+      let canonical=site==='douyin'?douyinAddress(address):biliAddress(address);
+      const page=await browser.page(canonical);let notified=false;
+      while(Date.now()<deadline&&!isCancelled()) {
+        await sleep(2500);
+        let current;try{current=await browser.evaluate(page.sessionId,'location.href');}catch{continue;}
+        const resolved=site==='douyin'?douyinAddress(current):biliAddress(current);
+        if(!resolved || (site==='douyin'&&new URL(resolved).hostname==='v.douyin.com') || (site==='bili'&&new URL(resolved).hostname==='b23.tv'))continue;
+        if(canonical.includes('v.douyin.com')||canonical.includes('b23.tv'))canonical=resolved;
+        if(site==='bili'&&/\/video\/av\d+/.test(canonical)&&/\/video\/BV/.test(resolved)) {
+          const requested=new URL(canonical).pathname.match(/av(\d+)/)[1];
+          let aid;try{aid=await browser.evaluate(page.sessionId,'String(window.__INITIAL_STATE__?.videoData?.aid||"")');}catch{continue;}
+          if(aid!==requested)continue;canonical=resolved;
+        }
+        let answer;try{answer=await browser.evaluate(page.sessionId,site==='douyin'?douyinProbeExpression(canonical):biliProbeExpression(canonical,quality));}catch{continue;}
+        if(answer?.state==='quality-unavailable')throw new Error('当前账号没有可读取的指定画质，请重试并选择最高画质或其他档位');
+        if(answer?.state==='unavailable')throw new Error('该视频页面暂不支持读取，请确认视频仍可正常播放');
+        if(answer?.state==='ready') {
+          if(!browserMediaAllowed(site,canonical,answer.mediaUrl)||(answer.audioUrl&&!browserMediaAllowed(site,canonical,answer.audioUrl)))throw new Error('播放器媒体地址不符合该平台要求');
+          return {site,page:canonical,title:answer.title,mediaUrl:answer.mediaUrl,audioUrl:answer.audioUrl,seconds:answer.seconds};
+        }
+        if(!notified){notify('请在下载专用 Edge 中确认该视频能播放；网站如要求登录或验证，请自行在原网站完成，软件随后自动继续。');notified=true;}
+      }
+    } else if(site==='xiaoe') {
       let page=await browser.page(address);let canonical=xiaoeAddress(address),loginOpened=false,contextChosen=false;
       while(Date.now()<deadline && !isCancelled()) {
         await sleep(2000);
@@ -60,6 +83,6 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
       }
     }
     if(isCancelled()) throw new Error('下载已取消');
-    throw new Error('等待网站登录或播放器超时，请完成原网站登录后重新打开下载器');
+    throw new Error('等待网站登录或播放器超时，请完成原网站登录后重试');
   } finally {browser.close();}
 }

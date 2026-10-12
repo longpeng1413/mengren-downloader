@@ -3,14 +3,26 @@
     [ValidateSet('best','1080','720','480')][string]$Quality,
     [string]$OutputDirectory,
     [switch]$Check,
-    [switch]$Probe
+    [switch]$Probe,
+    [switch]$Session
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 $env:PYTHONIOENCODING = 'utf-8'
+function Read-MengrenInput([string]$Prompt) {
+    [Console]::Write($Prompt + ': ')
+    [Console]::Out.Flush()
+    return [Console]::ReadLine()
+}
 $toolRoot = $PSScriptRoot
 try {
+    if ($Session -and !$Check -and !$Probe) {
+        Write-Host '猛人下载器：连续下载模式'
+        $Url = Read-MengrenInput '请粘贴下一条视频链接；直接回车退出'
+        if ([string]::IsNullOrWhiteSpace($Url)) { exit 20 }
+    }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
         try {
             $downloadFolderShell = New-Object -ComObject Shell.Application
@@ -44,23 +56,34 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.2.0（便携版）'
+        Write-Host '猛人下载器 v0.3.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
-        $Url = Read-Host '请粘贴视频网页链接'
+        $Url = Read-MengrenInput '请粘贴视频网页链接'
     }
     $Url = $Url.Trim()
+    $inputAddress = $null
+    if (![Uri]::TryCreate($Url,[UriKind]::Absolute,[ref]$inputAddress) -or $inputAddress.Scheme -notin @('http','https')) {
+        foreach ($match in [regex]::Matches($Url,'https?://[^\s<>"“”]+')) {
+            $candidate = $match.Value.TrimEnd([char[]]'。，、；;！!)]}）】')
+            $candidateUri = $null
+            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|weixin\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
+                $Url = $candidate
+                break
+            }
+        }
+    }
     $parsed = $null
     if (![Uri]::TryCreate($Url,[UriKind]::Absolute,[ref]$parsed) -or $parsed.Scheme -notin @('https','http') -or !$parsed.Host) {
         throw '请输入完整的 http 或 https 视频网页链接。'
     }
     $siteHost = $parsed.DnsSafeHost.ToLowerInvariant()
-    $browserSite = $siteHost -in @('weixin.qq.com','channels.weixin.qq.com') -or $siteHost -match '(^|\.)(xet\.tech|xetslk\.com|xetlk\.com|xiaoeknow\.com|xiaoe-tech\.com|xet\.citv\.cn|xet\.pomoho\.com)$'
+    $browserSite = $siteHost -in @('weixin.qq.com','channels.weixin.qq.com','douyin.com','www.douyin.com','v.douyin.com','www.iesdouyin.com') -or $siteHost -match '(^|\.)(xet\.tech|xetslk\.com|xetlk\.com|xiaoeknow\.com|xiaoe-tech\.com|xet\.citv\.cn|xet\.pomoho\.com)$'
     if ($browserSite) {
         Write-Host '将打开下载专用 Edge。首次使用请在原网站正常登录，之后会复用登录直到过期。'
         if ($siteHost -in @('weixin.qq.com','channels.weixin.qq.com')) {
             Write-Host '视频号分享链接将发给腾讯元宝解析；只发送这条链接，不发送聊天消息或转交登录信息。'
         }
-        Write-Host '小鹅通和视频号当前下载网站提供的原始画质，不保证可以指定分辨率。'
+        Write-Host '小鹅通、视频号和抖音当前下载网站提供的原始画质，不保证可以指定分辨率。'
         $siteArgs = @((Join-Path $toolRoot 'source\site-download.mjs'),'--url',$Url,'--output',$OutputDirectory)
         if ($Probe) { $siteArgs += '--probe' }
         & (Join-Path $toolRoot 'node.exe') @siteArgs
@@ -74,7 +97,7 @@ try {
             Write-Host '2. 1080P 及以下'
             Write-Host '3. 720P 及以下'
             Write-Host '4. 480P 及以下'
-            $choice = Read-Host '请选择 1-4，直接回车选最高画质'
+            $choice = Read-MengrenInput '请选择 1-4，直接回车选最高画质'
             $Quality = switch ($choice.Trim()) {
                 '' { 'best' }; '1' { 'best' }; '2' { '1080' }; '3' { '720' }; '4' { '480' }
                 default { throw '请选择 1、2、3 或 4。' }
@@ -106,6 +129,13 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Write-Host '未下载成功。请查看上方网站提示；若无匹配画质，可改选最高画质。' -ForegroundColor Yellow
         Write-Host '此工具不自动读取浏览器登录信息。' -ForegroundColor Yellow
+        if ($siteHost -in @('bilibili.com','www.bilibili.com','m.bilibili.com','b23.tv')) {
+            Write-Host '正在改用 B 站原网页读取当前可播放的音画；如需登录，请在专用 Edge 完成。'
+            $biliArgs = @((Join-Path $toolRoot 'source\site-download.mjs'),'--url',$Url,'--output',$OutputDirectory,'--quality',$Quality)
+            if ($Probe) { $biliArgs += '--probe' }
+            & (Join-Path $toolRoot 'node.exe') @biliArgs
+            exit $LASTEXITCODE
+        }
         exit 1
     }
     if (!$Probe) { Write-Host "下载完成，请到 $OutputDirectory 查看视频。" -ForegroundColor Green }

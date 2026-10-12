@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.2.0-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.3.0-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -133,25 +133,33 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Quality 48
 
 依次检查每条命令退出码。`Probe` 只打印视频 ID、标题、分辨率和格式，不输出媒体签名；测试视频与临时文件不要提交。错误报告保留必要错误类型，不包含登录信息或带签名的媒体地址。
 
-## 浏览器与站点接入（v0.2.0）
+## 浏览器与站点接入（v0.3.0）
 
 - `source/browser.mjs` 使用随包 Node 的原生 WebSocket 连接 Edge CDP。只用自己的 `%LOCALAPPDATA%\MengrenDownloader\BrowserProfile`，调试端口绑定 `127.0.0.1`、由浏览器动态分配，读取自己的 DevToolsActivePort。不会开放远端端口或复制日常 Edge 配置。
 - Microsoft Edge 安装在标准路径（Program Files / Program Files (x86) / LOCALAPPDATA）；找不到时给出明确错误，不自动安装、不下载浏览器。
 - 登录由用户在原网站手动完成。程序仅从精确同店铺/元宝原网站执行相关 API 请求，Cookie 由浏览器按原站规则发送；不通过 CDP Cookie/密码接口读取账户信息。
 - 小鹅通从原分享短链得到同店铺回放地址，再在同店铺已登录页面读取 `get_lookback_list` / `base_info`。店铺返回未登录时打开它自己的登录页并自动等待。未授权、无回放或未结束直播不作为下载成功。
 - 元宝原网站仅调用 `/api/weixin/get_parse_result` 解析所选视频号分享链接。临时播放凭证只用于 `channels.weixin.qq.com` 官方页，媒体签名只发往 `finder.video.qq.com`；不转交元宝/微信 Cookie，也不发送聊天消息。
-- `source/relay.mjs` 限定站点域名/路径、公网 DNS 地址、HTTPS 和重定向次数。小鹅通的清单、子清单、音画片段及普通 AES-128 密钥统一重写为短期本机地址；不支持的媒体保护格式直接拒绝。视频号文件采用流式读取，避免把完整视频缓存到内存。
+- `source/relay.mjs` 限定站点域名/路径、公网 DNS 地址、HTTPS 和重定向次数。小鹅通的清单、子清单、音画片段及普通 AES-128 密钥统一重写为短期本机地址；不支持的媒体保护格式直接拒绝。视频号、抖音和 B 站文件采用流式读取，避免把完整视频缓存到内存。
 - 子进程只看到本机中继地址，不看到上游媒体签名；内部 yt-dlp 使用空代理以避免系统代理接管回环连接。不会修改全局代理。
 - 下载先进入目标目录下的自有临时目录，检查视频轨道及原有音频后封装 MP4（无声视频保留为无声，不伪造音轨），再保存最终文件；失败不发布成完整结果。重复下载使用新文件名，不覆盖已完成视频。
 - 当前小鹅通/视频号下载网站提供的原始源，不承诺清晰度档位。主要目标是已结束直播回放与腾讯官方可解析分享链接，不涵盖所有课程类型或视频号。
 
 ```powershell
-.\node.exe --test tests/sites.test.mjs
+.\node.exe --test tests/sites.test.mjs tests/session.test.mjs
 # 只验证指定平台来源：仍会打开原网站并等待用户正常登录
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url '用户选择的平台分享链接'
 ```
 
 源文件均为标准 ES 模块，不需要 `npm install`。原生 WebSocket 使用随包 Node 24；别改为系统 Node 或新增隐含运行依赖。参考：[Node 原生 WebSocket](https://nodejs.org/docs/latest-v24.x/api/globals.html#class-websocket)、[Chromium 自定义配置目录调试说明](https://developer.chrome.com/blog/remote-debugging-port)。站点 API 行为可能变化，回归测试只检查边界与流程，真实登录/下载要在本机单独验证，不能把 CI 成功当作所有网站可用。
+
+### 抖音、B 站与连续会话
+
+- 抖音通过普通 Edge 原网页读取可见播放器的 currentSrc；遇到 MSE 播放器时仅接受所选视频匹配的资源，检查视频时长，分离音画时验证请求组与时长一致。支持短链跳转、完整链接和分享文案提取，不调用第三方解析服务或导出 Cookie。未能明确绑定到所选视频时等待或失败，不猜选其他视频。
+- B 站优先使用原 yt-dlp 流程和画质上限；失败才读取专用 Edge 当前 BV/AV、选定分 P 的 INITIAL_STATE/playinfo 或同站官方 player/playurl。独立音轨在受限媒体中继中下载后合并。网页读取同样受用户正常账号权限限制；不会自动下载全集或破解 DRM。
+- 正常入口是 C# 连续会话：子任务 `-Session` 的退出码 20 仅代表空输入退出；错误返回 1 后继续，取消返回 130 结束。每个子任务独立读取画质，避免上个任务的选择泄漏到下个任务。`download.ps1 -Url` 保持一次性调用，`--check` 不等待输入。
+- 输入使用 Console.ReadLine 与显式提示刷新，避免 Read-Host 在重定向输入下隐藏提示或阻塞。会话测试包含正式入口空输入退出及模拟成功/失败重试；真实网站连续下载仍需本机验证。
+- 公开回归样例：B 站 `BV1vL411G7N7`，抖音 `6961737553342991651`。来自上游 yt-dlp 官方测试样例，可能随时间失效；测试内容不提交、不随软件打包。
 
 ## 7. Git 同步与发布
 
@@ -167,7 +175,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件，不上传个人完整包。
 5. 核对 GitHub Release 是否公开、是否正确标为稳定/预发布、资产名/大小/摘要和源码提交关系。
 
-个人迁移完整包可包含项目内已有且通过哈希验证的三个 EXE；仍需保留相应许可。它不是目前默认公共发布物。源码/文档的小改动可只同步仓库，无需重发已验证的 v0.2.0。
+个人迁移完整包可包含项目内已有且通过哈希验证的三个 EXE；仍需保留相应许可。它不是目前默认公共发布物。源码/文档的小改动可只同步仓库，无需重发已验证版本。
 
 ## 8. 常见问题
 

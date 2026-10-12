@@ -48,16 +48,16 @@ function fileName(title,address) {
   return name+' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+'].mp4';
 }
 export async function downloadSite(address,output,{probe=false,quality='best',timeout}={}) {
-  const info=await resolveSource(address,{timeout,notify:message,isCancelled:()=>cancelled});
+  const info=await resolveSource(address,{timeout,notify:message,isCancelled:()=>cancelled,quality});
   message('已识别：'+info.title);
-  message('将下载网站提供的原始视频；当前小鹅通/视频号入口不承诺可切换分辨率。');
+  message(info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
   const outputPath=resolve(output);message('保存位置：'+outputPath);if(!probe) await mkdir(outputPath,{recursive:true});
   const job=probe?null:await mkdtemp(join(outputPath,'.mengren-'));
   const choices=info.renditions||[{url:info.mediaUrl}];let lastError;
   try {
     for(const rendition of choices.slice(0,4)) {
       if(cancelled) throw new Error('下载已取消');
-      const relay=await createRelay(info.site,rendition.url,info.site==='xiaoe'?new URL(info.page).origin+'/':'https://channels.weixin.qq.com/');
+      const relay=await createRelay(info.site,rendition.url,info.site==='channels'?'https://channels.weixin.qq.com/':new URL(info.page).origin+'/');
       try {
         const args=['--proxy','','--ignore-config','--no-plugin-dirs','--no-playlist','--no-warnings','--encoding','utf-8','--match-filter','!is_live','--progress-delta','1','--socket-timeout','30','--retries','3','--fragment-retries','3','--abort-on-unavailable-fragments','--concurrent-fragments','6','--hls-prefer-native','--fixup','never','--format','best'];
         if(probe) args.push('--simulate','--print','__MENGREN_SOURCE_OK__ %(duration)s');
@@ -69,9 +69,20 @@ export async function downloadSite(address,output,{probe=false,quality='best',ti
         const files=(await readdir(job)).filter(name=>/^source\.(?:mp4|mkv|webm|ts|mov|m4v)$/.test(name));
         if(files.length!==1) throw new Error('下载未生成完整视频文件');
         const source=join(job,files[0]);await validate(source);
+        let soundPath;
+        if(info.audioUrl) {
+          const soundRelay=await createRelay(info.site,info.audioUrl,new URL(info.page).origin+'/');
+          try {
+            const soundArgs=['--proxy','','--ignore-config','--no-plugin-dirs','--no-playlist','--no-warnings','--encoding','utf-8','--socket-timeout','30','--retries','3','--no-continue','--output',join(job,'sound.%(ext)s'),'--',soundRelay.url];
+            const soundResult=await run(join(root,'yt-dlp.exe'),soundArgs);
+            if(soundResult.code!==0)throw new Error('独立音轨下载失败');
+            const soundFiles=(await readdir(job)).filter(name=>/^sound\.(?:mp4|m4a|mkv|webm|aac)$/.test(name));
+            if(soundFiles.length!==1)throw new Error('独立音轨文件不完整');soundPath=join(job,soundFiles[0]);
+          } finally {await soundRelay.close();}
+        }
         const merged=join(job,'completed.mp4');
         message('正在合并为本地 MP4 文件……');
-        const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,'-map','0:v:0','-map','0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
+        const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,...(soundPath?['-i',soundPath]:[]),'-map','0:v:0','-map',soundPath?'1:a:0':'0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
         if(mux.code!==0) throw new Error('MP4 合并失败，没有保存为成功结果');
         await validate(merged);
         let target=join(outputPath,fileName(info.title,address));

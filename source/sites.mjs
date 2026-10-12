@@ -39,6 +39,8 @@ export function channelsShare(address) {
 export function isPlayback(address) { const u=safeHttps(address); return Boolean(u && !u.hash && u.hostname==='channels.weixin.qq.com' && u.pathname==='/finder-preview/pages/feed' && u.searchParams.get('token') && u.searchParams.get('eid')); }
 export function allowedMedia(site,address) {
   const u=safeHttps(address); if(!u || u.hash) return false;
+  if(site==='douyin')return hostIn(u.hostname,['douyinvod.com']);
+  if(site==='bili')return hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
   return site==='xiaoe' ? hostIn(u.hostname,mediaHosts) : site==='channels' && u.hostname==='finder.video.qq.com' && /^\/(?:\d+\/){2}stodownload$/.test(u.pathname);
 }
 export function xiaoeProbeExpression(page) {
@@ -81,3 +83,72 @@ export const playbackProbeExpression=`(${async function() {
     return {state:'ready',title:String(feed?.description||document.title||'视频号').slice(0,300),mediaUrl:feed?.h264VideoInfo?.videoUrl};
   } catch {return {state:'loading'};}
 }.toString()})()`;
+
+export function douyinAddress(address) {
+  const u=safeHttps(address);if(!u||u.hash||!['www.douyin.com','douyin.com','v.douyin.com','www.iesdouyin.com'].includes(u.hostname))return null;
+  if(u.hostname==='v.douyin.com'&&/^\/[A-Za-z0-9_-]+\/?$/.test(u.pathname))return u.href;
+  const id=u.pathname.match(/^\/(?:video|share\/video)\/(\d+)\/?$/)?.[1] || (u.pathname==='/'?u.searchParams.get('modal_id')||u.searchParams.get('vid'):null);
+  return id&&/^\d+$/.test(id)?`https://www.douyin.com/video/${id}`:null;
+}
+export function biliAddress(address) {
+  const u=safeHttps(address);if(!u||u.hash||!['www.bilibili.com','m.bilibili.com','bilibili.com','b23.tv'].includes(u.hostname))return null;
+  if(u.hostname==='b23.tv'&&/^\/[A-Za-z0-9]+\/?$/.test(u.pathname))return u.href;
+  const id=u.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/)?.[1];if(!id)return null;
+  const part=u.searchParams.get('p');if(part&&!/^[1-9]\d{0,3}$/.test(part))return null;
+  return `https://www.bilibili.com/video/${id}${part?'?p='+part:''}`;
+}
+export function browserMediaAllowed(site,page,address) {
+  const u=safeHttps(address);if(!u||u.hash)return false;
+  if(site==='douyin') {
+    const wanted=douyinAddress(page)?.match(/\/video\/(\d+)$/)?.[1];
+    return Boolean(wanted&&hostIn(u.hostname,['douyinvod.com'])&&(!u.searchParams.has('__vid')||u.searchParams.get('__vid')===wanted));
+  }
+  return site==='bili'&&Boolean(biliAddress(page))&&hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
+}
+export function douyinProbeExpression(page) {
+  return `(${async function(expected) {
+    const url=new URL(location.href),id=url.pathname.match(/^\/video\/(\d+)/)?.[1]||url.searchParams.get('modal_id')||url.searchParams.get('vid');
+    if(!['www.douyin.com','douyin.com'].includes(url.hostname)||'https://www.douyin.com/video/'+id!==expected)return {state:'loading'};
+    const videos=[...document.querySelectorAll('video')].filter(v=>{const r=v.getBoundingClientRect(),style=getComputedStyle(v);return r.width>0&&r.height>0&&style.visibility!=='hidden'&&style.display!=='none'&&Number.isFinite(v.duration)&&v.duration>0;});
+    const video=videos.find(v=>!v.paused)||videos[0];if(!video)return {state:'loading'};
+    const allowed=address=>{try{const u=new URL(address);return u.protocol==='https:'&&!u.username&&!u.password&&(!u.port||u.port==='443')&&(u.hostname==='douyinvod.com'||u.hostname.endsWith('.douyinvod.com'))&&(!u.searchParams.has('__vid')||u.searchParams.get('__vid')===id);}catch{return false;}};
+    const title=(document.querySelector('h1')?.textContent||document.title||'抖音视频').trim().slice(0,300);
+    if(allowed(video.currentSrc))return {state:'ready',title,mediaUrl:video.currentSrc,seconds:video.duration};
+    if(!video.currentSrc.startsWith('blob:'))return {state:'loading'};
+    const navigation=performance.getEntriesByType('navigation')[0];if(!navigation)return {state:'loading'};
+    const opened=new URL(navigation.name);if(opened.pathname!==url.pathname||opened.searchParams.get('modal_id')!==url.searchParams.get('modal_id'))return {state:'loading'};
+    const names=[...new Set(performance.getEntriesByType('resource').map(e=>e.name).filter(allowed))];
+    const measure=address=>new Promise(resolve=>{const element=document.createElement('video');element.preload='metadata';element.muted=true;const finish=value=>{clearTimeout(timer);element.onloadedmetadata=null;element.onerror=null;element.removeAttribute('src');element.load();resolve(value);};const timer=setTimeout(()=>finish(NaN),5000);element.onloadedmetadata=()=>finish(element.duration);element.onerror=()=>finish(NaN);element.src=address;});
+    const candidates=names.filter(name=>new URL(name).searchParams.get('mime_type')==='video_mp4'&&!/\/media-(?:audio|video)-/.test(new URL(name).pathname));
+    for(const candidate of candidates.slice(-6).reverse()){const duration=await measure(candidate);if(Number.isFinite(duration)&&Math.abs(duration-video.duration)<=Math.max(.5,video.duration*.005))return {state:'ready',title,mediaUrl:candidate,seconds:video.duration};}
+    const unique=list=>[...new Map(list.map(name=>[new URL(name).pathname.replace(/^\/[0-9a-f]{32}\/[0-9a-f]+(?=\/)/,''),name])).values()];
+    const picture=unique(names.filter(name=>new URL(name).pathname.includes('/media-video-'))),audio=unique(names.filter(name=>new URL(name).pathname.includes('/media-audio-')));
+    if(picture.length!==1||audio.length!==1||!new URL(picture[0]).searchParams.get('l')||new URL(picture[0]).searchParams.get('l')!==new URL(audio[0]).searchParams.get('l'))return {state:'loading'};
+    const lengths=await Promise.all([measure(picture[0]),measure(audio[0])]);
+    if(lengths.some(n=>!Number.isFinite(n)||Math.abs(n-video.duration)>Math.max(.5,video.duration*.005)))return {state:'loading'};
+    return {state:'ready',title,mediaUrl:picture[0],audioUrl:audio[0],seconds:video.duration};
+  }.toString()})(${JSON.stringify(page)})`;
+}
+export function biliProbeExpression(page,quality='best') {
+  return `(${async function(expected,quality) {
+    const u=new URL(location.href),wanted=new URL(expected);
+    if(!['www.bilibili.com','bilibili.com'].includes(u.hostname)||u.pathname.replace(/\/$/,'')!==wanted.pathname.replace(/\/$/,'')||(u.searchParams.get('p')||'1')!==(wanted.searchParams.get('p')||'1'))return {state:'loading'};
+    const state=window.__INITIAL_STATE__,part=Number(wanted.searchParams.get('p')||1),data=state?.videoData;
+    if(!data||data.bvid!==wanted.pathname.split('/').pop()&&'av'+data.aid!==wanted.pathname.split('/').pop())return {state:'loading'};
+    const cid=data.pages?.[part-1]?.cid;if(!cid)return {state:'unavailable'};
+    let info=window.__playinfo__?.data;
+    // Read only this page's selected cid using the official first-party API.
+    if(!info || part!==1) {
+      try {const response=await fetch('https://api.bilibili.com/x/player/playurl?bvid='+encodeURIComponent(data.bvid)+'&cid='+cid+'&qn=127&fnval=4048&fourk=1',{credentials:'include',signal:AbortSignal.timeout(20000)});const result=await response.json();if(result.code===0)info=result.data;}catch{}
+    }
+    if(!info)return {state:'loading'};
+    const videos=(info.dash?.video||[]).filter(v=>typeof(v.baseUrl||v.base_url)==='string'&&(quality==='best'||v.height<=Number(quality))).sort((a,b)=>b.height-a.height||b.bandwidth-a.bandwidth);
+    const audios=(info.dash?.audio||[]).sort((a,b)=>b.bandwidth-a.bandwidth);
+    const selected=videos[0],sound=audios[0];
+    if(selected)return {state:'ready',title:data.title||document.title,mediaUrl:selected.baseUrl||selected.base_url,...(sound?{audioUrl:sound.baseUrl||sound.base_url}:{}),seconds:Number(info.timelength)/1000,height:selected.height};
+    const heights={16:360,32:480,64:720,74:720,80:1080,112:1080,116:1080,120:2160,125:2160,126:2160,127:4320};
+    if(info.durl?.length===1&&(quality==='best'||heights[info.quality]&&heights[info.quality]<=Number(quality)))return {state:'ready',title:data.title||document.title,mediaUrl:info.durl[0].url,seconds:Number(info.timelength)/1000};
+    if(info.dash?.video?.length||info.durl?.length)return {state:'quality-unavailable'};
+    return {state:'loading'};
+  }.toString()})(${JSON.stringify(page)},${JSON.stringify(quality)})`;
+}

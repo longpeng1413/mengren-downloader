@@ -71,3 +71,28 @@ test('A real silent MP4 is valid, while a non-video file is rejected',async()=>{
     await writeFile(bad,'Not a media file');await assert.rejects(validate(bad));
   } finally {await unlink(video).catch(()=>{});await unlink(bad).catch(()=>{});await rmdir(folder);}
 });
+
+test('Douyin and Bilibili normalise page/short links and reject cross-item tracks',async()=>{
+  const {douyinAddress,biliAddress,browserMediaAllowed}=await import('../source/sites.mjs');
+  assert.equal(douyinAddress('https://www.douyin.com/?modal_id=123456'),'https://www.douyin.com/video/123456');
+  assert.equal(douyinAddress('https://v.douyin.com/Fixture/'),'https://v.douyin.com/Fixture/');
+  assert.equal(biliAddress('https://m.bilibili.com/video/BV1vL411G7N7/?p=2&share_source=copy'),'https://www.bilibili.com/video/BV1vL411G7N7?p=2');
+  assert.equal(biliAddress('https://b23.tv/Fixture'),'https://b23.tv/Fixture');
+  assert.equal(biliAddress('https://www.bilibili.com/video/BV1vL411G7N7?p=-1'),null);
+  for(const bad of ['https://douyin.com.evil.org/video/123','https://user:pass@www.douyin.com/video/123'])assert.equal(douyinAddress(bad),null);
+  assert.ok(browserMediaAllowed('douyin','https://www.douyin.com/video/123','https://v1.douyinvod.com/video.mp4?__vid=123'));
+  assert.equal(browserMediaAllowed('douyin','https://www.douyin.com/video/123','https://v1.douyinvod.com/video.mp4?__vid=456'),false);
+  assert.ok(browserMediaAllowed('bili','https://www.bilibili.com/video/BV1vL411G7N7','https://upos.bilivideo.com/video.m4s'));
+  assert.equal(browserMediaAllowed('bili','https://www.bilibili.com/video/BV1vL411G7N7','https://evil.org/video.m4s'),false);
+});
+test('Bilibili browser fallback honours current part, quality cap and separate audio',async()=>{
+  const {biliProbeExpression}=await import('../source/sites.mjs');
+  const href='https://www.bilibili.com/video/BV1vL411G7N7';
+  const context={location:{href},URL,AbortSignal,document:{title:'Fixture'},window:{__INITIAL_STATE__:{videoData:{bvid:'BV1vL411G7N7',title:'Fixture',pages:[{cid:1}]}},__playinfo__:{data:{timelength:20000,dash:{video:[{height:1080,bandwidth:500,baseUrl:'https://upos.bilivideo.com/1080.m4s'},{height:720,bandwidth:300,baseUrl:'https://upos.bilivideo.com/720.m4s'}],audio:[{bandwidth:128,baseUrl:'https://upos.bilivideo.com/audio.m4s'}]}}}}};
+  const info=await vm.runInNewContext(biliProbeExpression(href,'720'),context);
+  assert.equal(info.state,'ready');assert.equal(info.height,720);assert.equal(info.mediaUrl,'https://upos.bilivideo.com/720.m4s');assert.equal(info.audioUrl,'https://upos.bilivideo.com/audio.m4s');
+  const capped=await vm.runInNewContext(biliProbeExpression(href,'480'),context);assert.equal(capped.state,'quality-unavailable');
+  context.window.__playinfo__.data.durl=[{url:'https://upos.bilivideo.com/1080.mp4'}];context.window.__playinfo__.data.quality=80;
+  const noUpsize=await vm.runInNewContext(biliProbeExpression(href,'480'),context);assert.equal(noUpsize.state,'quality-unavailable');
+  context.location.href=href+'?p=2';const wrong=await vm.runInNewContext(biliProbeExpression(href,'720'),context);assert.equal(wrong.state,'loading');
+});
