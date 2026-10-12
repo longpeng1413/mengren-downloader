@@ -13,3 +13,8 @@
 *.mp4
 *.mkv
 *.webm
+
+/CaptureHelper.exe
+*.pfx
+*.cer
+*.pem

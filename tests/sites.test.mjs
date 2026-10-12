@@ -67,7 +67,7 @@ test('A real silent MP4 is valid, while a non-video file is rejected',async()=>{
   const folder=await mkdtemp(join(tmpdir(),'mengren-video-test-')),video=join(folder,'silent.mp4'),bad=join(folder,'invalid.txt');
   try {
     const code=await new Promise(done=>{const child=spawn(resolve('ffmpeg.exe'),['-v','error','-f','lavfi','-i','color=c=black:s=64x64:r=1','-t','1','-an',video],{stdio:'ignore',windowsHide:true});child.on('close',done);child.on('error',()=>done(-1));});
-    assert.equal(code,0);await validate(video);
+    assert.equal(code,0);await validate(video);await assert.rejects(validate(video,{requireAudio:true}));
     await writeFile(bad,'Not a media file');await assert.rejects(validate(bad));
   } finally {await unlink(video).catch(()=>{});await unlink(bad).catch(()=>{});await rmdir(folder);}
 });

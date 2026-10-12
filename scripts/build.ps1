@@ -7,13 +7,16 @@ if (!(Test-Path -LiteralPath $compiler)) { throw '缺少 Windows .NET Framework 
 $compilerArgs = @('/nologo','/target:exe','/platform:x64','/optimize+',('/win32icon:' + (Join-Path $root 'assets\app.ico')),('/out:' + (Join-Path $root '猛人下载器.exe')),(Join-Path $root 'source\Launcher.cs'))
 & $compiler @compilerArgs
 if ($LASTEXITCODE -ne 0) { throw '入口构建失败。' }
+$helperArgs = @('/nologo','/target:exe','/platform:x64','/optimize+','/r:System.Web.Extensions.dll',('/out:' + (Join-Path $root 'CaptureHelper.exe')),(Join-Path $root 'source\CaptureHelper.cs'))
+& $compiler @helperArgs
+if ($LASTEXITCODE -ne 0) { throw '抓取辅助模块构建失败，需要 .NET Framework 4.8。' }
 if (!$Package) { exit 0 }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
-$zipPath = Join-Path $dist 'mengren-downloader-0.3.0-windows-x64.zip'
-$files = @('猛人下载器.exe','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE','AGENTS.md','准备开发环境.cmd')
+$zipPath = Join-Path $dist 'mengren-downloader-0.4.0-alpha.1-windows-x64.zip'
+$files = @('猛人下载器.exe','CaptureHelper.exe','恢复网络.cmd','抓取使用说明.txt','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE','AGENTS.md','准备开发环境.cmd')
 foreach ($folder in @('assets','source','scripts','licenses','docs','tests')) {
     Get-ChildItem -LiteralPath (Join-Path $root $folder) -Recurse -File | ForEach-Object { $files += $_.FullName.Substring($root.Length + 1) }
 }

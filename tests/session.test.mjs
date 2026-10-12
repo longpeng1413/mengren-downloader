@@ -61,3 +61,15 @@ test('Formal application accepts empty Enter at its actual link prompt',async()=
   });
   assert.equal(result.code,0);assert.equal(result.sent,true);assert.equal(result.text.includes('按回车关闭窗口'),false);
 });
+
+test('Declining capture returns to link input without activating system settings',async()=>{
+  const result=await new Promise((done,reject)=>{
+    const child=spawn(resolve('猛人下载器.exe'),[],{stdio:['pipe','pipe','pipe'],windowsHide:true});
+    let text='',sent=0,declined=false;
+    const timer=setTimeout(()=>{child.kill();reject(Error('Capture consent entry timed out'));},30000);
+    const receive=buffer=>{text+=buffer.toString('utf8');const count=(text.match(/直接回车退出/g)||[]).length;while(sent<count)child.stdin.write((sent++===0?'抓取':'')+'\n');if(!declined&&text.includes('其他输入返回')){declined=true;child.stdin.write('返回\n');}};
+    child.stdout.on('data',receive);child.stderr.on('data',receive);child.stdin.on('error',()=>{});
+    child.on('error',error=>{clearTimeout(timer);reject(error);});child.on('close',code=>{clearTimeout(timer);done({code,text,sent,declined});});
+  });
+  assert.equal(result.code,0);assert.equal(result.sent,2);assert.equal(result.declined,true);assert.equal(result.text.includes('抓取已开启'),false);
+});

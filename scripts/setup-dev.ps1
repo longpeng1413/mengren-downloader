@@ -12,6 +12,8 @@ try {
     $compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (!(Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) { throw '缺少 Windows 自带 PowerShell；请按开发文档修复系统组件。' }
     if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) { throw '缺少 .NET Framework csc.exe；请按开发文档准备，现代 .NET SDK 不替代此编译器。' }
+    $frameworkRelease = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release).Release
+    if ($frameworkRelease -lt 528040) { throw '需要 .NET Framework 4.8，请按开发文档从微软官方安装。' }
     $git = Get-Command git.exe -ErrorAction SilentlyContinue
     if (!$git) { throw '缺少 Git for Windows。请执行 winget install --id Git.Git -e --source winget，安装后重开终端；详见 docs/DEVELOPMENT.md。' }
     & $git.Source --version
@@ -21,7 +23,7 @@ try {
         & $cli.Source --version
         if ($LASTEXITCODE -ne 0) { Write-Warning 'GitHub CLI 无法启动；本地开发可继续，发布前需要修复或调整 PATH。' }
     } else { Write-Host 'GitHub CLI 未安装；不影响本地开发，发布时按开发文档准备。' }
-    foreach ($relative in @('assets\app.ico','source\Launcher.cs','scripts\build.ps1','download.ps1','bootstrap.ps1','dependencies.json')) {
+    foreach ($relative in @('assets\app.ico','source\CaptureHelper.cs','source\Launcher.cs','scripts\build.ps1','download.ps1','bootstrap.ps1','dependencies.json')) {
         if (!(Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { throw "源码缺少 $relative，请获取完整仓库。" }
     }
     Write-Host '基础开发条件检查通过。' -ForegroundColor Green

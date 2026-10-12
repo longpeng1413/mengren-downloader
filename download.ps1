@@ -20,7 +20,7 @@ $toolRoot = $PSScriptRoot
 try {
     if ($Session -and !$Check -and !$Probe) {
         Write-Host '猛人下载器：连续下载模式'
-        $Url = Read-MengrenInput '请粘贴下一条视频链接；直接回车退出'
+        $Url = Read-MengrenInput '请粘贴下一条视频链接，或输入 抓取；直接回车退出'
         if ([string]::IsNullOrWhiteSpace($Url)) { exit 20 }
     }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -44,7 +44,10 @@ try {
             throw "缺少 $name，请恢复完整的猛人下载器文件夹。"
         }
     }
+    if (!(Test-Path -LiteralPath (Join-Path $toolRoot 'CaptureHelper.exe') -PathType Leaf)) { throw '缺少 CaptureHelper.exe，请完整解压新版软件包。' }
     if ($Check) {
+        & (Join-Path $toolRoot 'CaptureHelper.exe') check $env:TEMP
+        if ($LASTEXITCODE -ne 0) { throw '抓取辅助模块启动失败，需要 .NET Framework 4.8。' }
         & (Join-Path $toolRoot 'yt-dlp.exe') --version
         if ($LASTEXITCODE -ne 0) { throw '下载程序启动失败' }
         $version = & (Join-Path $toolRoot 'ffmpeg.exe') -version
@@ -56,9 +59,13 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.3.0（便携版）'
+        Write-Host '猛人下载器 v0.4.0-alpha.1（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频网页链接'
+    }
+    if ($Url -and $Url.Trim() -eq '抓取') {
+        & (Join-Path $toolRoot 'node.exe') (Join-Path $toolRoot 'source\capture.mjs') --output $OutputDirectory
+        exit $LASTEXITCODE
     }
     $Url = $Url.Trim()
     $inputAddress = $null

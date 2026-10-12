@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.3.0-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`；`dist/mengren-downloader-0.4.0-alpha.1-windows-x64.zip`；`dist/SHA256SUMS.txt`。ZIP 内包含项目代码和交接文档，公共包排除三个第三方 EXE。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -146,7 +146,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Quality 48
 - 当前小鹅通/视频号下载网站提供的原始源，不承诺清晰度档位。主要目标是已结束直播回放与腾讯官方可解析分享链接，不涵盖所有课程类型或视频号。
 
 ```powershell
-.\node.exe --test tests/sites.test.mjs tests/session.test.mjs
+.\node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs
 # 只验证指定平台来源：仍会打开原网站并等待用户正常登录
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url '用户选择的平台分享链接'
 ```
@@ -185,3 +185,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - 文件不可写：核实目标权限、占用、Windows 错误码及空闲空间，不把所有失败都叫“空间不足”。
 - 中文入口在 CI 找不到：确认内联脚本的 shell 为 `pwsh`，本地 `.ps1` 有 UTF-8 BOM。
 - 缺少组件/仅有源码：运行开发准备入口；仅双击源码 ZIP 或复制一个 EXE 都不足以运行。
+
+## 播放抓取模块（0.4.0-alpha.1）
+
+运行/构建需要 .NET Framework 4.8（Release >=528040）；新版 setup-dev 检查条件。构建第二个自有 CaptureHelper.exe，公开 ZIP 包含它，无新增第三方运行组件。
+source/capture.mjs 是交互入口；capture-proxy.mjs 使用 Node 内置 HTTP/TLS，CaptureHelper.cs 用系统 Framework 生成本机独立 2048 位 RSA CA/7 天叶证书、维护 CurrentUser Root 信任、代理恢复日志及异常退出守护。私钥只在当前用户私有 ACL 的 LOCALAPPDATA 下，不读取浏览器 Cookie 存储。证书有一年期限；过期需在恢复网络后重新准备，不能忽略服务器证书错误。
+所有证书和恢复数据都在 LOCALAPPDATA/MengrenDownloader/Capture，不得提交/打包。启动默认关闭；用户在软件输入“开启”才安装信任和切换系统代理。原手动 HTTP 代理可作为上游；PAC 暂时移除并备份，复杂/认证/SOCKS 代理不保证。不开启时不修改网络设置。仅媒体域名范围做 TLS 解读，其他域名原样 CONNECT 隧道。生产拒绝私有/回环上游，测试才显式允许本地 fixture。
+代理只转发原请求，不记录正文、Cookie、Authorization；候选只保留本次内存的 URL、类型、大小、来源 origin。完整下载只重用媒体 URL 和 origin，不复制登录头。m3u8 使用既有受限中继重写片段/密钥，受保护格式拒绝；捕获结果要求视频+音轨，不把独立片段发布成完整视频。
+Windows代理变更先保存日志，退出时只在设置仍属于本软件时恢复；其他应用改过代理时拒绝覆盖并保留备份。正常退出及后台守护都会尝试移除本程序证书信任。恢复网络.cmd 仅恢复本程序记录，不删除其他软件证书或改第三方配置。
+CI 测试使用临时独立证书、进程内部指定 CA、隔离注册表测试路径；不安装 CurrentUser Root 证书，不修改真实系统代理。测试涵盖 HTTP/HTTPS 抓取、其他域名隧道、Cookie 不复制、完整 MP4/HLS 下载解码、无效上游 CA 拒绝、恢复及外部改动冲突。实际微信/Cami权限、某些程序的证书固定/QUIC代理行为、强制关闭窗口守护必须在有权限的用户环境另测，不用本地 fixture 代替。
