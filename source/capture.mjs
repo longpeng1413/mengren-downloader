@@ -41,7 +41,7 @@ async function main(output){
     command('trust');
     const guard=spawn(helper,['guard',data,String(process.pid)],{detached:true,stdio:'ignore',windowsHide:true});await new Promise((done,reject)=>{guard.once('spawn',done);guard.once('error',()=>reject(Error('后台网络恢复进程未能启动，已停止抓取')));});guard.unref();
     console.log('抓取已开启。现在去微信、小程序或网页播放你有权限观看的视频，再回到本窗口。');
-    await runCaptureMenu({catalog:proxy.catalog,ask,shouldQuit:()=>quitting,download:item=>downloadResolved({site:'capture',title:item.title,page:item.referer||item.url,mediaUrl:item.url,requireAudio:true,fileNameStyle:'title'},item.url,output,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia,playlist:item.kind==='hls'}})});
+    await runCaptureMenu({catalog:proxy.catalog,ask,shouldQuit:()=>quitting,download:item=>downloadResolved({site:'capture',title:item.title,page:item.referer||item.url,mediaUrl:item.url,requireAudio:true,fileNameStyle:'title',courseOrder:item.courseOrder||item.id},item.url,output,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia,playlist:item.kind==='hls'}})});
   }finally{await cleanup();}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

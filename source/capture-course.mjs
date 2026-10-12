@@ -22,6 +22,8 @@ export function mediaIdentity(address) {
   u.searchParams.sort();return u.href;
 }
 const titleKeys=['videoName','video_name','videoTitle','video_title','lessonName','lesson_name','lessonTitle','lesson_title','resourceName','resource_name','resourceTitle','resource_title','title','courseName','course_name','name','课程名称','视频名称'];
+const orderKeys=['lessonNumber','lesson_number','lessonNo','lesson_no','lessonOrder','lesson_order','courseNumber','course_number','videoNo','video_no','videoOrder','video_order','序号','课程序号'];
+function explicitOrder(object){for(const key of orderKeys){const value=object[key];if(typeof value!=='number'&&!(typeof value==='string'&&/^\d{1,5}$/.test(value.trim())))continue;const number=Number(value);if(Number.isInteger(number)&&number>0&&number<=10000)return number;}}
 const urlKey=/^(?:url|src|video_?url|media_?url|file_?url|play_?url|video_?path|file_?path|download_?url|hls_?url|mp4_?url)$/i;
 const mediaContainer=/^(?:video|media|file|playInfo|play_info|playUrls|play_urls|sources|url_info)$/i;
 export function extractCourseMetadata(document,allows) {
@@ -41,7 +43,7 @@ export function extractCourseMetadata(document,allows) {
     if(!object||typeof object!=='object'||depth>12||++visited>10000||entries.size>=500)return;
     if(!Array.isArray(object)) {
       const title=titleKeys.map(key=>courseTitle(object[key])).find(Boolean);
-      if(title)for(const url of addresses(object))entries.set(mediaIdentity(url),{url,title});
+      if(title)for(const url of addresses(object))entries.set(mediaIdentity(url),{url,title,order:explicitOrder(object)});
     }
     for(const [key,value] of Object.entries(object))if(!/^(?:user|author|owner|member|profile|account|credentials|authorization|cookie)$/i.test(key)&&value&&typeof value==='object')walk(value,depth+1);
   }

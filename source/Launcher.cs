@@ -6,14 +6,14 @@ using System.Text;
 [assembly: AssemblyTitle("猛人下载器")]
 [assembly: AssemblyDescription("粘贴链接，选择画质，下载到系统下载文件夹")]
 [assembly: AssemblyProduct("猛人下载器")]
-[assembly: AssemblyVersion("0.4.0.3")]
-[assembly: AssemblyFileVersion("0.4.0.3")]
+[assembly: AssemblyVersion("0.4.0.4")]
+[assembly: AssemblyFileVersion("0.4.0.4")]
 internal static class Launcher {
     private static int Main(string[] args) {
         bool check = args.Length == 1 && args[0] == "--check";
         Console.OutputEncoding = new UTF8Encoding(false);
         Console.InputEncoding = new UTF8Encoding(false);
-        Console.Title = "猛人下载器 v0.4.0-alpha.3";
+        Console.Title = "猛人下载器 v0.4.0-alpha.4";
         int code = 1;
         try {
             if (args.Length != 0 && !check) throw new ArgumentException("支持的参数：--check；正常下载请直接双击打开。");

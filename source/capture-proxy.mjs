@@ -24,12 +24,12 @@ export class CaptureCatalog {
   clear(){this.items.length=0;this.names.clear();}
   learn(document,allows,referer) {
     const changed=[];
-    for(const {url,title} of extractCourseMetadata(document,allows)) {
-      const key=mediaIdentity(url);this.names.set(key,title);
+    for(const {url,title,order} of extractCourseMetadata(document,allows)) {
+      const key=mediaIdentity(url),previousName=this.names.get(key);this.names.set(key,{title,order:order||previousName?.order});
       if(this.names.size>1000)this.names.delete(this.names.keys().next().value);
       const existing=this.items.find(item=>item.identity===key);
-      if(existing){if(existing.titleSource!=='manual'&&existing.title!==title){existing.title=title;existing.titleSource='course';changed.push(existing);}}
-      else {const kind=mediaKind(url);if(kind==='video'||kind==='hls'){const item={id:++this.serial,url,identity:key,kind,size:0,host:new URL(url).hostname,title,titleSource:'course',source:'course-list',...(referer?{referer}:{})};this.items.push(item);if(this.items.length>200)this.items.shift();changed.push(item);}}
+      if(existing){let updated=false;if(existing.titleSource!=='manual'&&existing.title!==title){existing.title=title;existing.titleSource='course';updated=true;}if(order&&existing.orderSource!=='manual'&&existing.courseOrder!==order){existing.courseOrder=order;existing.orderSource='site';updated=true;}if(updated)changed.push(existing);}
+      else {const kind=mediaKind(url);if(kind==='video'||kind==='hls'){const item={id:++this.serial,url,identity:key,kind,size:0,host:new URL(url).hostname,title,titleSource:'course',source:'course-list',...(order?{courseOrder:order,orderSource:'site'}:{}),...(referer?{referer}:{})};this.items.push(item);if(this.items.length>200)this.items.shift();changed.push(item);}}
 
     }
     return changed;
@@ -41,8 +41,8 @@ export class CaptureCatalog {
     const size=Number(response.headers['content-range']?.match(/\/(\d+)$/)?.[1]||response.headers['content-length'])||0;
     const referer=request.headers?.referer;let origin;try{origin=new URL(referer).origin+'/';}catch{}
     if(previous){previous.url=url;previous.kind=kind;previous.source='playback';previous.size=Math.max(previous.size,size);if(origin)previous.referer=origin;return null;}
-    const title=this.names.get(identity)||responseFileTitle(response.headers);
-    const item={id:++this.serial,url,identity,kind,size,referer:origin,host:new URL(url).hostname,...(title?{title,titleSource:'course'}:{})};
+    const metadata=this.names.get(identity),title=metadata?.title||responseFileTitle(response.headers);
+    const item={id:++this.serial,url,identity,kind,size,referer:origin,host:new URL(url).hostname,...(title?{title,titleSource:'course'}:{}),...(metadata?.order?{courseOrder:metadata.order,orderSource:'site'}:{})};
     this.items.push(item);if(this.items.length>200)this.items.shift();return item;
   }
 }

@@ -48,8 +48,8 @@ test('HTTP/HTTPS media capture, non-media TLS tunnel and full download work with
   const text=await throughTLS(proxy.port,securePort,'localhost',localCA);assert.ok(text.startsWith('HTTP/1.1 200'));assert.equal(proxy.catalog.items.length,2);console.log('HTTPS capture stage passed');
   const tunneled=await throughTLS(proxy.port,securePort,'127.0.0.1',originCA);assert.ok(tunneled.startsWith('HTTP/1.1 200'));assert.equal(proxy.catalog.items.length,2);
   hadCookie=false;
-  const result=await downloadResolved({site:'capture',title:'1. 峰级线基础画法',fileNameStyle:'title',page:address,mediaUrl:address,requireAudio:true},address,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia}});
-  assert.ok(result.file.endsWith('1. 峰级线基础画法.mp4'));assert.equal(hadCookie,false);const decoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',result.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(decoded.status,0,decoded.stderr);
+  const result=await downloadResolved({site:'capture',title:'峰级线基础画法',fileNameStyle:'title',courseOrder:13,page:address,mediaUrl:address,requireAudio:true},address,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia}});
+  assert.ok(result.file.endsWith('13. 峰级线基础画法.mp4'));assert.equal(hadCookie,false);const decoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',result.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(decoded.status,0,decoded.stderr);
   const playlist='http://localhost:'+plainPort+'/fixture';
   const hls=await downloadResolved({site:'capture',title:'Extensionless HLS capture fixture',page:playlist,mediaUrl:playlist,requireAudio:true},playlist,folder,{relayOptions:{allowMedia:proxy.allows,getUpstream:proxy.getMedia,playlist:true}});
   const hlsDecoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',hls.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(hlsDecoded.status,0,hlsDecoded.stderr);

@@ -44,10 +44,11 @@ async function cleanup(job,output) {
   }
   await rmdir(job).catch(()=>{});
 }
-export function videoFileName(title,address,{titleOnly=false}={}) {
+export function videoFileName(title,address,{titleOnly=false,order}={}) {
   let name=String(title||'视频').replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').trim().slice(0,110).replace(/[. ]+$/,'');
   if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name='视频 '+name;
-  return name+(titleOnly?'':' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+']')+'.mp4';
+  let prefix='';if(Number.isInteger(order)&&order>0){prefix=String(order).padStart(2,'0')+'. ';name=name.replace(new RegExp('^0*'+order+'[.．、]\\s*(?![0-9])'),'');}
+  return prefix+name+(titleOnly?'':' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+']')+'.mp4';
 }
 export async function saveCompleted(source,output,name) {
   // Same-filesystem hard linking publishes the validated file without copying a
@@ -103,7 +104,7 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,...(soundPath?['-i',soundPath]:[]),'-map','0:v:0','-map',soundPath?'1:a:0':'0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
         if(mux.code!==0) throw new Error('MP4 合并失败，没有保存为成功结果');
         await validate(merged,{requireAudio:Boolean(info.requireAudio)});
-        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,address,{titleOnly:info.fileNameStyle==='title'||info.site==='xiaoe'}));
+        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,address,{titleOnly:info.fileNameStyle==='title'||info.site==='xiaoe',order:info.site==='capture'?info.courseOrder:undefined}));
         message('下载完成：'+target);return {site:info.site,title:info.title,file:target};
       } catch(error) {
         if(cancelled) throw new Error('下载已取消');
