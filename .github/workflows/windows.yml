@@ -6,7 +6,7 @@ jobs:
   verify:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check developer prerequisites
         shell: powershell
         run: ./scripts/setup-dev.ps1 -CheckOnly
@@ -26,7 +26,7 @@ jobs:
       - name: Build complete test package
         shell: powershell
         run: ./scripts/build.ps1 -Package -FullPackage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mengren-downloader-windows-x64
           path: dist/*
