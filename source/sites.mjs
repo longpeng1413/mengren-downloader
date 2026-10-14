@@ -41,6 +41,8 @@ export function allowedMedia(site,address) {
   const u=safeHttps(address); if(!u || u.hash) return false;
   if(site==='douyin')return hostIn(u.hostname,['douyinvod.com']);
   if(site==='bili')return hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
+  // Only plain (unencrypted) full-song files from QQ Music's own audio servers.
+  if(site==='qqmusic')return hostIn(u.hostname,['stream.qqmusic.qq.com'])&&/^\/(?:F000|M800|M500|C400|C200)[0-9A-Za-z]{8,32}\.(?:flac|mp3|m4a)$/.test(u.pathname);
   return site==='xiaoe' ? hostIn(u.hostname,mediaHosts) : site==='channels' && u.hostname==='finder.video.qq.com' && /^\/(?:\d+\/){2}stodownload$/.test(u.pathname);
 }
 export function xiaoeProbeExpression(page) {

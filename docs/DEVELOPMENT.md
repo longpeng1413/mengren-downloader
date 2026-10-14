@@ -93,7 +93,8 @@ winget install --id GitHub.cli -e --source winget
 | `download.ps1` | 链接输入、画质上限、系统下载目录、yt-dlp 参数与错误处理 |
 | `bootstrap.ps1` | 固定依赖下载、哈希校验、组件准备锁 |
 | `source/*.mjs` | 两个站点的地址校验、Edge 会话、原网站 API 读取和受限本机中继 |
-| `tests/sites.test.mjs` | 链接格式、登录范围、媒体地址/清单重写回归 |
+| `source/qqmusic.mjs` | QQ 音乐单曲：链接解析、官方接口、专用 Edge 内读取、分段下载、试听片段拒绝、标签与 .lrc 歌词 |
+| `tests/sites.test.mjs` | 链接格式、登录范围、媒体地址/清单重写回归（含 QQ 音乐） |
 | `dependencies.json` | 官方下载组件锁定清单 |
 | `scripts/setup-dev.ps1` | 新电脑开发环境检查、构建和组件准备 |
 | `scripts/build.ps1` | 编译 C#，生成公开 ZIP 和 SHA256SUMS |
@@ -112,7 +113,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.4.1-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.5.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -160,6 +161,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - 正常入口是 C# 连续会话：子任务 `-Session` 的退出码 20 仅代表空输入退出；错误返回 1 后继续；Ctrl+C 由入口拦截，只中止当前 PowerShell/下载子进程（退出码 130 同义），随后提示“已中止本次任务”并回到链接输入。每个子任务独立读取画质，避免上个任务的选择泄漏到下个任务。`download.ps1 -Url` 保持一次性调用，`--check` 不等待输入。
 - 输入使用 Console.ReadLine 与显式提示刷新，避免 Read-Host 在重定向输入下隐藏提示或阻塞。会话测试包含正式入口空输入退出及模拟成功/失败重试；真实网站连续下载仍需本机验证。
 - 公开回归样例：B 站 `BV1vL411G7N7`，抖音 `6961737553342991651`。来自上游 yt-dlp 官方测试样例，可能随时间失效；测试内容不提交、不随软件打包。
+
+### QQ 音乐（2026-10-14）
+
+- `download.ps1` 对 `y.qq.com` 及其子域名询问读取方式（会员账号 best / 不登录 standard）后调用 `source/qqmusic.mjs --url --output --quality best|standard [--format F000|M800|M500|C400|C200] [--probe]`。`-Quality best` 对应会员账号，其他值对应不登录；`-Probe` 未指定时用不登录。
+- 未给 `--format` 时由 Node 用 readline 列出全部可下音质（大小取 track_info.file 的 size_flac/size_320mp3 等）供用户选择，回车默认最高的 MP3（老人机兼容）。只下所选格式，失败不自动换格式。测试交互时须“看到提示再写入下一行”（见 Ctrl+C harness 思路）；一次性管道灌入多行会被 PowerShell 的 ReadLine 预读吞掉，Node 读到空输入而走默认值，这不代表真实窗口行为。
+- 接口 `u.y.qq.com/cgi-bin/musicu.fcg`：`get_song_detail_yqq`（信息）、`vkey.GetVkeyServer`（地址）、`GetPlayLyricInfo`（base64 歌词）。vkey 请求的 guid 每次随机 10 位，固定值会被拒绝（code 1000）。不要从 Cookie 取 uin：普通音质完全不带 Cookie；最高音质在专用 Edge 的 `y.qq.com` 歌曲页内以 `credentials:'include'` 调用，返回值只保留 songmid/filename/purl/是否有 ekey。登录判断只看页面右上角 `.mod_top_login` 是否显示“登录”。
+- 只接受 F000/M800/M500/C400/C200 + media_mid 的未加密文件；有 ekey 的跳过，不实现任何解密。媒体地址 `https://dl.stream.qqmusic.qq.com/<purl>`，经 `relay.mjs` 导出的 `guardedGet`（白名单/公网 IP/跳转限制）分段下载。
+- `checkAudio` 完整解码，以最后的 `time=` 为实际时长；短于整首 `max(3 秒, 2%)` 拒绝，防止试听片段冒充整首。不使用 `-xerror`：实测有 QQ 源 FLAC 自带个别坏帧，整首仍可播放。
+- 公开样例：免费 `004Ti8rT003TaZ`（来自 yt-dlp 测试）；会员歌实测需本人登录，不能用模拟代替。
 
 ## 7. Git 同步与发布
 

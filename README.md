@@ -4,13 +4,13 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.4.1 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.5.0 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.4.1/mengren-downloader-0.4.1-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
+**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.5.0/mengren-downloader-0.5.0-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
 
-到 [v0.4.1 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.4.1) 下载 `mengren-downloader-0.4.1-windows-x64-full.zip`。
+到 [v0.5.0 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.5.0) 下载 `mengren-downloader-0.5.0-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
 2. 双击 **猛人下载器.exe**。完整便携包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。
@@ -37,6 +37,17 @@ YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P
 **抖音**：粘贴 `https://www.douyin.com/video/...`、`https://v.douyin.com/...` 或包含链接的分享文案。软件打开专用 Edge，读取当前视频播放器提供的音视频；需要登录或验证时请在原网站完成，随后自动继续。当前不提供抖音清晰度档位，也不保证所有视频的播放器格式可读取。
 
 **B 站**：支持 BV/AV 视频链接、手机网页链接、`b23.tv` 分享短链，以及 `?p=2` 等单个分 P。优先直接解析；失败时打开专用 Edge，从当前视频页面读取并合并音画。画质范围取决于平台和账号当前权限，选择“最高”不代表可取得付费或账号未获授权的画质；直接解析成功时不使用专用 Edge 的登录，因此大会员专属画质目前拿不到；不会自动下载全部分 P。
+
+## QQ 音乐（v0.5.0 新增）
+
+粘贴单曲链接（`y.qq.com/n/ryqq/songDetail/...`、新版 `ryqq_v2`、手机播放页）或 App 分享的 `c6.y.qq.com` 短链，也可粘贴包含链接的分享文案。先选读取方式：
+
+- **用会员账号读取（默认）**：在下载专用 Edge 的 QQ 音乐网页正常登录（QQ/微信扫码），之后复用登录。软件在该网页内调用 QQ 音乐官方接口，登录由浏览器自动带上，软件不读取 Cookie；服务器按账号权限决定可下音质，会员可能取得无损 FLAC 或 320k MP3。
+- **不登录快速读取**：不打开浏览器，免费歌曲最高 128k MP3；读取不到时自动改用专用 Edge。
+
+读取后列出这首歌全部可下载的音质、文件大小和兼容提示，输入编号选择；**直接回车选最高的 MP3**（会员通常是 320k），因为 MP3 几乎所有手机都能放。给老人机、车载或旧 MP3 播放器下载时选 MP3；FLAC 无损和 M4A 在这类设备上常常不认。只下载所选音质，失败时不会自动换成其他格式。
+
+文件保存为“歌名 - 歌手.flac/.mp3/.m4a”，写入歌名、歌手、专辑标签，并在旁边保存同名 `.lrc` 滚动歌词；同名追加 `(2)`，不覆盖。只下载账号可以完整播放的歌曲：试听片段（时长明显短于整首）会被拒绝，带加密密钥的格式直接跳过，不解密客户端加密文件，不使用第三方解析网站。QQ 音乐服务器对每条连接限速，软件用 4 条连接分段下载并逐段校验。暂不支持歌单、专辑和歌手批量下载。
 
 ## 小鹅通和微信视频号
 

@@ -125,3 +125,107 @@ test('Finished downloads close only the tabs they opened and keep the Edge windo
   pages=[{targetId:'only',type:'page'}];calls.length=0;await fake.closePages(['only']);
   assert.deepEqual(pages.map(p=>p.targetId),['only']);assert.ok(calls.some(([m,u,s])=>m==='Page.navigate'&&u==='about:blank'&&s==='s-only'));
 });
+
+test('QQ Music accepts single-song pages and share links only',async()=>{
+  const {qqSong}=await import('../source/qqmusic.mjs');
+  for(const link of ['https://y.qq.com/n/ryqq/songDetail/004Ti8rT003TaZ','https://y.qq.com/n/ryqq_v2/songDetail/004Ti8rT003TaZ?ADTAG=x','http://y.qq.com/n/yqq/song/004Ti8rT003TaZ.html','https://i.y.qq.com/v8/playsong.html?songmid=004Ti8rT003TaZ&ADTAG=share'])
+    assert.deepEqual(qqSong(link),{mid:'004Ti8rT003TaZ'},link);
+  assert.deepEqual(qqSong('https://i.y.qq.com/v8/playsong.html?songid=102065756'),{songId:'102065756'});
+  assert.deepEqual(qqSong('https://c6.y.qq.com/base/fcgi-bin/u?__=Fixture12'),{short:'https://c6.y.qq.com/base/fcgi-bin/u?__=Fixture12'});
+  for(const bad of ['https://y.qq.com.evil.org/n/ryqq/songDetail/004Ti8rT003TaZ','https://user:pass@y.qq.com/n/ryqq/songDetail/004Ti8rT003TaZ','https://y.qq.com/n/ryqq/playlist/123','https://y.qq.com/n/ryqq/songDetail/bad!','https://i.y.qq.com/v8/playsong.html?songid=x1'])
+    assert.equal(qqSong(bad),null,bad);
+});
+test('QQ Music keeps only plain full-song files on official audio servers, best first',async()=>{
+  const {playableFormats,trackInfo}=await import('../source/qqmusic.mjs');
+  const mid='004Ti8rT003TaZ',media='0013Waho393WaG',item=(filename,purl,extra={})=>({songmid:mid,filename,purl,...extra});
+  const data={req_1:{code:0,data:{midurlinfo:[
+    item('F000'+media+'.flac','F000'+media+'.flac?vkey=x',{ekey:'encrypted'}),
+    item('M800'+media+'.mp3',''),
+    item('C400'+media+'.m4a','C400'+media+'.m4a?vkey=x'),
+    item('M500'+media+'.mp3','M500'+media+'.mp3?vkey=x'),
+    {songmid:'other',filename:'C200'+media+'.m4a',purl:'C200'+media+'.m4a?vkey=x'}]}}};
+  const list=playableFormats(data,mid,media);
+  assert.deepEqual(list.map(f=>f.label),['128k MP3','96k M4A']);
+  assert.ok(list.every(f=>new URL(f.url).hostname==='dl.stream.qqmusic.qq.com'));
+  assert.deepEqual(playableFormats({req_1:{code:0,data:{midurlinfo:[item('M500'+media+'.mp3','/evil.org/M500'+media+'.mp3')]}}},mid,media),[]);
+  assert.deepEqual(playableFormats({req_1:{code:1000,data:{midurlinfo:[item('M500'+media+'.mp3','M500'+media+'.mp3?x')]}}},mid,media),[]);
+  assert.ok(allowedMedia('qqmusic','https://ws.stream.qqmusic.qq.com/M500'+media+'.mp3?vkey=x'));
+  for(const bad of ['https://evil.org/M500'+media+'.mp3','https://dl.stream.qqmusic.qq.com/RS02'+media+'.mp3','https://dl.stream.qqmusic.qq.com/O600'+media+'.mflac','http://dl.stream.qqmusic.qq.com/M500'+media+'.mp3'])
+    assert.equal(allowedMedia('qqmusic',bad),false,bad);
+  const detail={code:0,info:{code:0,data:{track_info:{mid,id:1,title:' 歌名 ',interval:281,singer:[{name:'甲'},{name:'乙'}],album:{title:'专辑'},file:{media_mid:media,size_320mp3:10792943}}}}};
+  assert.deepEqual(trackInfo(detail,{mid}),{mid,media,title:'歌名',singers:['甲','乙'],album:'专辑',seconds:281,sizes:{F000:0,M800:10792943,M500:0,C400:0,C200:0}});
+  assert.equal(trackInfo(detail,{mid:'0039MnYb0qxYhV'}),null);
+});
+test('QQ Music browser read uses the page login without touching cookies or storage',async()=>{
+  const {qqBrowserExpression,vkeyPayload}=await import('../source/qqmusic.mjs');
+  const payload=vkeyPayload('004Ti8rT003TaZ','0013Waho393WaG','1234567890'),expression=qqBrowserExpression(payload);
+  assert.doesNotMatch(expression,/cookie|localStorage|sessionStorage|uin/i);
+  const run=(hostname,loggedOut)=>{const calls=[];const link={textContent:'登录',offsetParent:loggedOut?{}:null};
+    const context={location:{hostname},AbortSignal,document:{querySelector:()=>({querySelectorAll:()=>[link]})},fetch:async(url,options)=>{calls.push({url,options});return {json:async()=>({req_1:{code:0,data:{midurlinfo:[{songmid:'004Ti8rT003TaZ',filename:'x',purl:'x',ekey:'secret',vkey:'secret'}]}}})};}};
+    return vm.runInNewContext(expression,context).then(result=>({result,calls}));};
+  const out=await run('y.qq.com',true);assert.equal(out.result.loggedIn,false);
+  const ok=await run('y.qq.com',false);assert.equal(ok.result.loggedIn,true);
+  assert.equal(ok.calls[0].url,'https://u.y.qq.com/cgi-bin/musicu.fcg');assert.equal(ok.calls[0].options.credentials,'include');
+  assert.deepEqual(JSON.parse(ok.calls[0].options.body),payload);
+  assert.deepEqual(Object.keys(ok.result.data.req_1.data.midurlinfo[0]).sort(),['ekey','filename','purl','songmid']);assert.equal(ok.result.data.req_1.data.midurlinfo[0].ekey,true);
+  const foreign=await run('evil.org',false);assert.equal(foreign.result.state,'loading');assert.equal(foreign.calls.length,0);
+});
+test('QQ Music lyrics, file names and duplicate audio files',async()=>{
+  const {lyricText,audioFileName}=await import('../source/qqmusic.mjs');
+  const {saveCompleted}=await import('../source/site-download.mjs');
+  const encode=text=>Buffer.from(text).toString('base64');
+  assert.equal(lyricText({req_2:{code:0,data:{lyric:encode('[ti:x]\n[00:01.27]It&apos;s &amp; ok&#58;')}}}),"[ti:x]\r\n[00:01.27]It's & ok:");
+  assert.equal(lyricText({req_2:{code:0,data:{lyric:encode('此歌曲为没有填词的纯音乐，请您欣赏')}}}),null);
+  assert.equal(audioFileName({title:'A/B: C?',singers:['甲','乙']},'mp3'),'A B  C  - 甲、乙.mp3');
+  const {mkdtemp,writeFile,readdir,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const folder=await mkdtemp(join(tmpdir(),'mengren-audio-test-'));
+  try {
+    const source=join(folder,'source.mp3');await writeFile(source,'fixture');await writeFile(join(folder,'歌 - 手.mp3'),'existing');
+    assert.equal(await saveCompleted(source,folder,'歌 - 手.mp3'),join(folder,'歌 - 手 (2).mp3'));
+    assert.ok((await readdir(folder)).includes('歌 - 手.mp3'));
+  } finally {await rm(folder,{recursive:true,force:true});}
+});
+test('A preview clip is never accepted as the full song',async()=>{
+  const {checkAudio}=await import('../source/qqmusic.mjs');
+  const {mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join,resolve}=await import('node:path');const {spawn}=await import('node:child_process');
+  const folder=await mkdtemp(join(tmpdir(),'mengren-audio-test-')),clip=join(folder,'clip.mp3');
+  try {
+    const code=await new Promise(done=>{const child=spawn(resolve('ffmpeg.exe'),['-v','error','-f','lavfi','-i','sine=frequency=440:duration=6','-c:a','libmp3lame','-b:a','64k',clip],{stdio:'ignore',windowsHide:true});child.on('close',done);child.on('error',()=>done(-1));});
+    assert.equal(code,0);
+    assert.ok(Math.abs(await checkAudio(clip,6)-6)<0.5);
+    await assert.rejects(checkAudio(clip,60),/片段/);
+  } finally {await rm(folder,{recursive:true,force:true});}
+});
+test('QQ Music ranged download reassembles exact bytes, retries a bad range and rejects wrong ranges',async()=>{
+  const {fetchAudio}=await import('../source/qqmusic.mjs');
+  const {Readable}=await import('node:stream');const {mkdtemp,readFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const body=Buffer.from(Array.from({length:10000},(_,i)=>i*7%251));let flaky=true;
+  const server=(lie=false)=>async(site,url,referer,range)=>{
+    assert.equal(site,'qqmusic');assert.equal(referer,'https://y.qq.com/');
+    const [from,to]=range.match(/^bytes=(\d+)-(\d+)$/).slice(1).map(Number);
+    if(from===3000&&flaky){flaky=false;return {response:Object.assign(Readable.from([body.subarray(from,from+5)]),{statusCode:206,headers:{'content-range':`bytes ${from}-${to}/${body.length}`}})};}
+    return {response:Object.assign(Readable.from([body.subarray(from,to+1)]),{statusCode:206,headers:{'content-range':`bytes ${lie&&from?from+1:from}-${to}/${body.length}`}})};
+  };
+  const folder=await mkdtemp(join(tmpdir(),'mengren-audio-test-'));
+  try {
+    const file=join(folder,'a.mp3');
+    assert.equal(await fetchAudio('https://dl.stream.qqmusic.qq.com/x',file,{workers:3,chunk:1000,get:server()}),body.length);
+    assert.ok((await readFile(file)).equals(body));assert.equal(flaky,false);
+    await assert.rejects(fetchAudio('https://dl.stream.qqmusic.qq.com/x',join(folder,'b.mp3'),{workers:2,chunk:1000,get:server(true)}),/不完整/);
+  } finally {await rm(folder,{recursive:true,force:true});}
+});
+test('QQ Music lists every quality with size and lets the user pick; Enter picks the best MP3',async()=>{
+  const {qqFormats,formatMenu,chooseFormat,defaultFormat}=await import('../source/qqmusic.mjs');
+  const all=qqFormats.map(f=>({...f,url:'x'})),sizes={F000:55397039,M800:10792943,M500:4317292,C400:0,C200:1642440};
+  const menu=formatMenu(all,sizes);
+  assert.equal(menu.length,5);assert.match(menu[0],/无损 FLAC.*52\.8MB.*不支持/);assert.match(menu[1],/320k MP3.*10\.3MB.*← 默认/);assert.match(menu[3],/大小未知/);
+  assert.equal(defaultFormat(all),1);assert.equal(defaultFormat(all.filter(f=>f.ext!=='mp3')),0);
+  const answers=list=>{const queue=[...list];return async()=>queue.length?queue.shift():null;};
+  const log=console.log;console.log=()=>{};
+  try {
+    assert.equal((await chooseFormat(all,sizes,answers(['']))).prefix,'M800');
+    assert.equal((await chooseFormat(all,sizes,answers(['9','abc',' 3 ']))).prefix,'M500');
+    assert.equal((await chooseFormat(all,sizes,answers(['1']))).prefix,'F000');
+    assert.equal((await chooseFormat(all,sizes,answers([]))).prefix,'M800');
+  } finally {console.log=log;}
+});

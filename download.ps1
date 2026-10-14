@@ -20,7 +20,7 @@ $toolRoot = $PSScriptRoot
 try {
     if ($Session -and !$Check -and !$Probe) {
         Write-Host '猛人下载器：连续下载模式'
-        $Url = Read-MengrenInput '请粘贴下一条视频链接，或输入 抓取；直接回车退出'
+        $Url = Read-MengrenInput '请粘贴下一条视频或 QQ 音乐歌曲链接，或输入 抓取；直接回车退出'
         if ([string]::IsNullOrWhiteSpace($Url)) { exit 20 }
     }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -59,9 +59,9 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.4.1（便携版）'
+        Write-Host '猛人下载器 v0.5.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
-        $Url = Read-MengrenInput '请粘贴视频网页链接'
+        $Url = Read-MengrenInput '请粘贴视频或 QQ 音乐歌曲链接'
     }
     if ($Url -and $Url.Trim() -eq '抓取') {
         & (Join-Path $toolRoot 'node.exe') (Join-Path $toolRoot 'source\capture.mjs') --output $OutputDirectory
@@ -73,7 +73,7 @@ try {
         foreach ($match in [regex]::Matches($Url,'https?://[^\s<>"“”]+')) {
             $candidate = $match.Value.TrimEnd([char[]]'。，、；;！!)]}）】')
             $candidateUri = $null
-            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|weixin\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
+            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|weixin\.qq\.com|y\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
                 $Url = $candidate
                 break
             }
@@ -84,6 +84,28 @@ try {
         throw '请输入完整的 http 或 https 视频网页链接。'
     }
     $siteHost = $parsed.DnsSafeHost.ToLowerInvariant()
+    if ($siteHost -eq 'y.qq.com' -or $siteHost.EndsWith('.y.qq.com')) {
+        $musicQuality = 'standard'
+        if ($Quality) { if ($Quality -eq 'best') { $musicQuality = 'best' } }
+        elseif (!$Probe) {
+            Write-Host ''
+            Write-Host '1. 用会员账号读取（默认）：打开下载专用 Edge，用登录的 QQ 音乐账号读取，可选音质最多'
+            Write-Host '2. 不登录快速读取：不打开浏览器，免费歌曲最高 128k；读取不到时自动改用专用 Edge'
+            Write-Host '读取后会列出这首歌所有可下载的音质和大小，由你选择。'
+            $musicQuality = $null
+            while (!$musicQuality) {
+                $choice = Read-MengrenInput '请选择 1 或 2，直接回车选 1'
+                if ($null -eq $choice) { throw '没有读取到音质选择。' }
+                $musicQuality = switch ($choice.Trim()) { '' { 'best' }; '1' { 'best' }; '2' { 'standard' }; default { $null } }
+                if (!$musicQuality) { Write-Host '请输入 1 或 2；直接回车选 1。' -ForegroundColor Yellow }
+            }
+        }
+        Write-Host '只下载账号有权完整播放的歌曲；不下载试听片段，不处理加密文件。'
+        $musicArgs = @((Join-Path $toolRoot 'source\qqmusic.mjs'),'--url',$Url,'--output',$OutputDirectory,'--quality',$musicQuality)
+        if ($Probe) { $musicArgs += '--probe' }
+        & (Join-Path $toolRoot 'node.exe') @musicArgs
+        exit $LASTEXITCODE
+    }
     $browserSite = $siteHost -in @('weixin.qq.com','channels.weixin.qq.com','douyin.com','www.douyin.com','v.douyin.com','www.iesdouyin.com') -or $siteHost -match '(^|\.)(xet\.tech|xetslk\.com|xetlk\.com|xiaoeknow\.com|xiaoe-tech\.com|xet\.citv\.cn|xet\.pomoho\.com)$'
     if ($browserSite) {
         Write-Host '将打开下载专用 Edge。首次使用请在原网站正常登录，之后会复用登录直到过期。'

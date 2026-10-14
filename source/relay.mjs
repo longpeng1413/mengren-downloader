@@ -19,7 +19,7 @@ function lookup(host,options,callback) {
     options.all ? callback(null,list) : callback(null,list[0].address,list[0].family);
   });
 }
-async function guardedGet(site,address,referer,range,depth=0) {
+export async function guardedGet(site,address,referer,range,depth=0) {
   if(depth>5 || !allowedMedia(site,address)) throw new Error('媒体地址不在该网站的允许范围内');
   const url=new URL(address);
   const response=await new Promise((resolve,reject)=>{

@@ -10,7 +10,8 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const message=text=>console.log(String(text).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]'));
 let child,cancelled=false;
 process.on('SIGINT',()=>{cancelled=true;child?.kill('SIGINT');process.exitCode=130;});
-async function run(executable,args,{quiet=false}={}) {
+export const isCancelled=()=>cancelled;
+export async function run(executable,args,{quiet=false}={}) {
   return new Promise((resolve,reject)=>{
     let text='',pending='',nextProgress=0;
     const emit=line=>{
@@ -36,7 +37,7 @@ export async function validate(file,{requireAudio=false}={}) {
   const duration=answer.text.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
   if(!duration || Number(duration[1])*3600+Number(duration[2])*60+Number(duration[3])<=0) throw new Error('文件播放时长无效');
 }
-async function cleanup(job,output) {
+export async function cleanup(job,output) {
   if(dirname(job)!==output || !basename(job).startsWith('.mengren-')) throw new Error('临时目录范围校验失败');
   for(const file of await readdir(job)) {
     if(file.includes('/')||file.includes('\\')) throw new Error('临时文件名称无效');
@@ -44,7 +45,7 @@ async function cleanup(job,output) {
   }
   await rmdir(job).catch(()=>{});
 }
-const ownerFile='.owner';
+export const ownerFile='.owner';
 function running(pid) {try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}}
 // Closing the window mid-download kills this process before cleanup. Remove such
 // leftovers next time: only our own .mengren-XXXXXX folders whose owner process has
@@ -64,18 +65,22 @@ export async function removeAbandonedJobs(output,{now=Date.now()}={}) {
   }
   return removed;
 }
+export function safeStem(text,fallback='视频') {
+  let name=String(text||fallback).replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').trim().slice(0,110).replace(/[. ]+$/,'');
+  if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name=fallback+' '+name;
+  return name;
+}
 export function videoFileName(title,address,{titleOnly=false,order}={}) {
-  let name=String(title||'视频').replace(/[<>:"/\\|?*\x00-\x1f]/g,' ').trim().slice(0,110).replace(/[. ]+$/,'');
-  if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name='视频 '+name;
+  let name=safeStem(title);
   let prefix='';if(Number.isInteger(order)&&order>0){prefix=String(order).padStart(2,'0')+'. ';name=name.replace(new RegExp('^0*'+order+'[.．、]\\s*(?![0-9])'),'');}
   return prefix+name+(titleOnly?'':' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+']')+'.mp4';
 }
 export async function saveCompleted(source,output,name) {
   // Same-filesystem hard linking publishes the validated file without copying a
   // large video or replacing an existing user file. FAT/exotic filesystems fall back.
-  const stem=name.replace(/\.mp4$/i,'');
+  const ext=name.match(/\.[A-Za-z0-9]{1,5}$/)?.[0]||'',stem=name.slice(0,name.length-ext.length);
   for(let index=1;index<=10000;index++) {
-    const target=join(output,index===1?name:stem+' ('+index+').mp4');
+    const target=join(output,index===1?name:stem+' ('+index+')'+ext);
     try {
       try{await link(source,target);}catch(error){if(!['EPERM','ENOSYS','ENOTSUP','EOPNOTSUPP','EXDEV','EINVAL'].includes(error.code))throw error;await copyFile(source,target,constants.COPYFILE_EXCL);}
       return target;
