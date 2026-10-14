@@ -2,7 +2,6 @@ import {spawn} from 'node:child_process';
 import {mkdir,mkdtemp,readFile,readdir,unlink,rmdir,link,copyFile,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createHash} from 'node:crypto';
 import {constants} from 'node:fs';
 import {resolveSource} from './source-resolver.mjs';
 import {createRelay} from './relay.mjs';
@@ -70,10 +69,11 @@ export function safeStem(text,fallback='视频') {
   if(!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name=fallback+' '+name;
   return name;
 }
-export function videoFileName(title,address,{titleOnly=false,order}={}) {
+// File names are the plain title; saveCompleted adds (2) instead of overwriting.
+export function videoFileName(title,{order}={}) {
   let name=safeStem(title);
   let prefix='';if(Number.isInteger(order)&&order>0){prefix=String(order).padStart(2,'0')+'. ';name=name.replace(new RegExp('^0*'+order+'[.．、]\\s*(?![0-9])'),'');}
-  return prefix+name+(titleOnly?'':' ['+createHash('sha256').update(address).digest('hex').slice(0,10)+']')+'.mp4';
+  return prefix+name+'.mp4';
 }
 export async function saveCompleted(source,output,name) {
   // Same-filesystem hard linking publishes the validated file without copying a
@@ -131,7 +131,7 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,...(soundPath?['-i',soundPath]:[]),'-map','0:v:0','-map',soundPath?'1:a:0':'0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
         if(mux.code!==0) throw new Error('MP4 合并失败，没有保存为成功结果');
         await validate(merged,{requireAudio:Boolean(info.requireAudio)});
-        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,address,{titleOnly:info.fileNameStyle==='title'||info.site==='xiaoe',order:info.site==='capture'?info.courseOrder:undefined}));
+        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,{order:info.site==='capture'?info.courseOrder:undefined}));
         message('下载完成：'+target);return {site:info.site,title:info.title,file:target};
       } catch(error) {
         if(cancelled) throw new Error('下载已取消');

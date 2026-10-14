@@ -16,6 +16,37 @@ function Read-MengrenInput([string]$Prompt) {
     [Console]::Out.Flush()
     return [Console]::ReadLine()
 }
+# Same rules as removeAbandonedJobs in source/site-download.mjs: only our own
+# .mengren-XXXXXX folders whose owner process has exited (or, without an owner
+# record, a day old) and that contain only files.
+function Remove-MengrenAbandonedJobs([string]$Folder) {
+    $removed = 0
+    foreach ($dir in @(Get-ChildItem -LiteralPath $Folder -Directory -Force -ErrorAction SilentlyContinue)) {
+        if ($dir.Name -cnotmatch '^\.mengren-[A-Za-z0-9]{6}$') { continue }
+        try {
+            $owner = 0
+            try { $owner = [int](Get-Content -LiteralPath (Join-Path $dir.FullName '.owner') -Raw | ConvertFrom-Json).pid } catch { }
+            if ($owner -gt 0) { if (Get-Process -Id $owner -ErrorAction SilentlyContinue) { continue } }
+            elseif (((Get-Date) - $dir.LastWriteTime).TotalHours -lt 24) { continue }
+            if (@(Get-ChildItem -LiteralPath $dir.FullName -Directory -Force).Count) { continue }
+            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
+            $removed++
+        } catch { }
+    }
+    return $removed
+}
+# Publishes a finished file without replacing an existing one: name.mp4, name (2).mp4 ...
+function Save-MengrenUnique([string]$Source, [string]$Folder) {
+    $name = [IO.Path]::GetFileName($Source)
+    $stem = [IO.Path]::GetFileNameWithoutExtension($name); $ext = [IO.Path]::GetExtension($name)
+    for ($index = 1; $index -le 10000; $index++) {
+        $target = Join-Path $Folder $(if ($index -eq 1) { $name } else { "$stem ($index)$ext" })
+        if (Test-Path -LiteralPath $target) { continue }
+        try { [IO.File]::Move($Source, $target); return $target }
+        catch [IO.IOException] { if (!(Test-Path -LiteralPath $target)) { throw } }
+    }
+    throw '同名视频过多，请换一个保存文件夹。'
+}
 $toolRoot = $PSScriptRoot
 try {
     if ($Session -and !$Check -and !$Probe) {
@@ -152,18 +183,37 @@ try {
         '--socket-timeout', '30', '--windows-filenames', '--trim-filenames', '160',
         '--merge-output-format', 'mp4/mkv'
     )
+    $job = $null
     if ($Probe) {
         $downloadArgs += @('--simulate','--print','%(id)s | %(title)s | %(resolution)s | %(format_id)s')
     } else {
         if (![IO.Path]::IsPathRooted($OutputDirectory)) { throw '保存文件夹必须填写完整路径。' }
         New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+        if (Remove-MengrenAbandonedJobs $OutputDirectory) { Write-Host '已清理上次中断留下的临时文件。' }
         Write-Host "保存位置：$OutputDirectory"
         Write-Host '正在解析和下载，进度会显示在此窗口。按 Ctrl+C 可中止。'
-        $downloadArgs += @('--paths',$OutputDirectory,'--output','%(title)s [%(id)s].%(ext)s','--newline')
+        # Download into our own temporary folder first, then publish under the plain
+        # title; an existing file of the same name gets (2) instead of being skipped.
+        $letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+        $job = Join-Path $OutputDirectory ('.mengren-' + -join (1..6 | ForEach-Object { $letters[(Get-Random -Maximum $letters.Length)] }))
+        New-Item -ItemType Directory -Path $job | Out-Null
+        [IO.File]::WriteAllText((Join-Path $job '.owner'), ('{"pid":' + $PID + '}'))
+        $downloadArgs += @('--paths',$job,'--output','%(title)s.%(ext)s','--newline')
     }
     $downloadArgs += @('--',$Url)
-    & (Join-Path $toolRoot 'yt-dlp.exe') @downloadArgs
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        & (Join-Path $toolRoot 'yt-dlp.exe') @downloadArgs
+        $downloadCode = $LASTEXITCODE
+        $saved = $null
+        if ($downloadCode -eq 0 -and $job) {
+            $results = @(Get-ChildItem -LiteralPath $job -File -Force | Where-Object { $_.Extension -match '^\.(mp4|mkv|webm|mov|m4v|flv)$' })
+            if ($results.Count -ne 1) { throw '下载结果不完整，没有保存。请重试。' }
+            $saved = Save-MengrenUnique $results[0].FullName $OutputDirectory
+        }
+    } finally {
+        if ($job -and (Test-Path -LiteralPath $job)) { Remove-Item -LiteralPath $job -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    if ($downloadCode -ne 0) {
         Write-Host '未下载成功。请查看上方网站提示；若无匹配画质，可改选最高画质。' -ForegroundColor Yellow
         Write-Host '此工具不自动读取浏览器登录信息。' -ForegroundColor Yellow
         if ($siteHost -in @('bilibili.com','www.bilibili.com','m.bilibili.com','b23.tv')) {
@@ -175,7 +225,7 @@ try {
         }
         exit 1
     }
-    if (!$Probe) { Write-Host "下载完成，请到 $OutputDirectory 查看视频。" -ForegroundColor Green }
+    if ($saved) { Write-Host "下载完成：$saved" -ForegroundColor Green }
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1

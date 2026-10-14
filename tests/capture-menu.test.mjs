@@ -79,9 +79,9 @@ test('Queued downloads use freshly resolved bound titles rather than stale snaps
  await menu(c,['全部',''],async item=>{titles.push(item.title);if(item.id===1)c.learn({videoName:'第二课准确名',videoUrl:media(2)},allowed);});assert.deepEqual(titles,['第一课','第二课准确名']);
 });
 test('Captured names have no hash suffix, and concurrent saves preserve existing same-name files',async()=>{
- assert.equal(videoFileName('《边缘循环》10.08',media(1),{titleOnly:true}),'《边缘循环》10.08.mp4');
- assert.equal(videoFileName('1. 峰级线基础画法',media(1),{titleOnly:true}),'1. 峰级线基础画法.mp4');assert.equal(videoFileName('CON',media(1),{titleOnly:true}),'视频 CON.mp4');
- assert.equal(videoFileName('../基础:画法? ',media(1),{titleOnly:true}),'.. 基础 画法.mp4');assert.match(videoFileName('旧平台',media(1)),/旧平台 \[[a-f0-9]{10}\]\.mp4/);
+ assert.equal(videoFileName('《边缘循环》10.08'),'《边缘循环》10.08.mp4');
+ assert.equal(videoFileName('1. 峰级线基础画法'),'1. 峰级线基础画法.mp4');assert.equal(videoFileName('CON'),'视频 CON.mp4');
+ assert.equal(videoFileName('../基础:画法? '),'.. 基础 画法.mp4');assert.equal(videoFileName('30秒教会你看懂趋势强弱#干货 #知识'),'30秒教会你看懂趋势强弱#干货 #知识.mp4');
  const folder=await mkdtemp(join(tmpdir(),'mengren-course-names-'));
  try{
   const source=join(folder,'completed.mp4'),existing=join(folder,'课程.mp4');await writeFile(source,'new');await writeFile(existing,'original');
@@ -98,7 +98,7 @@ test('Explicit site lesson numbers bind to media and manual course order survive
  const invalid=new CaptureCatalog();invalid.learn({videoName:'课程',videoUrl:media(1),lessonNo:0,index:50,sort:999},allowed);assert.equal(invalid.items[0].courseOrder,undefined);
 });
 test('Course filenames preserve original list order for partial queues and do not mistake dates for numbering',()=>{
- assert.equal(videoFileName('必胜课',media(1),{titleOnly:true,order:13}),'13. 必胜课.mp4');assert.equal(videoFileName('基础画法',media(1),{titleOnly:true,order:1}),'01. 基础画法.mp4');
- assert.equal(videoFileName('1. 基础画法',media(1),{titleOnly:true,order:1}),'01. 基础画法.mp4');assert.equal(videoFileName('10.08 边缘循环',media(1),{titleOnly:true,order:10}),'10. 10.08 边缘循环.mp4');
- const c=catalog(17);for(const item of c.items.slice(0,12))item.downloaded=true;const names=selectCapture('全部',c.items).map(item=>videoFileName('课程',item.url,{titleOnly:true,order:item.courseOrder||item.id}));assert.deepEqual(names,['13. 课程.mp4','14. 课程.mp4','15. 课程.mp4','16. 课程.mp4','17. 课程.mp4']);
+ assert.equal(videoFileName('必胜课',{order:13}),'13. 必胜课.mp4');assert.equal(videoFileName('基础画法',{order:1}),'01. 基础画法.mp4');
+ assert.equal(videoFileName('1. 基础画法',{order:1}),'01. 基础画法.mp4');assert.equal(videoFileName('10.08 边缘循环',{order:10}),'10. 10.08 边缘循环.mp4');
+ const c=catalog(17);for(const item of c.items.slice(0,12))item.downloaded=true;const names=selectCapture('全部',c.items).map(item=>videoFileName('课程',{order:item.courseOrder||item.id}));assert.deepEqual(names,['13. 课程.mp4','14. 课程.mp4','15. 课程.mp4','16. 课程.mp4','17. 课程.mp4']);
 });
