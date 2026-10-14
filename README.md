@@ -4,13 +4,13 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.5.0 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.5.1 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.5.0/mengren-downloader-0.5.0-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
+**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.5.1/mengren-downloader-0.5.1-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
 
-到 [v0.5.0 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.5.0) 下载 `mengren-downloader-0.5.0-windows-x64-full.zip`。
+到 [v0.5.1 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.5.1) 下载 `mengren-downloader-0.5.1-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
 2. 双击 **猛人下载器.exe**。完整便携包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。

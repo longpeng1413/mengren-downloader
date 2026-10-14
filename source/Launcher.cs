@@ -6,15 +6,15 @@ using System.Text;
 [assembly: AssemblyTitle("猛人下载器")]
 [assembly: AssemblyDescription("粘贴链接，选择画质，下载到系统下载文件夹")]
 [assembly: AssemblyProduct("猛人下载器")]
-[assembly: AssemblyVersion("0.5.0.0")]
-[assembly: AssemblyFileVersion("0.5.0.0")]
+[assembly: AssemblyVersion("0.5.1.0")]
+[assembly: AssemblyFileVersion("0.5.1.0")]
 internal static class Launcher {
     private static volatile bool cancelRequested;
     private static int Main(string[] args) {
         bool check = args.Length == 1 && args[0] == "--check";
         Console.OutputEncoding = new UTF8Encoding(false);
         Console.InputEncoding = new UTF8Encoding(false);
-        Console.Title = "猛人下载器 v0.5.0";
+        Console.Title = "猛人下载器 v0.5.1";
         // Ctrl+C reaches every process in this console. The task (PowerShell and its
         // downloader) stops; the launcher stays alive so the window does not vanish.
         Console.CancelKeyPress += delegate(object sender, ConsoleCancelEventArgs e) { e.Cancel = true; cancelRequested = true; };
