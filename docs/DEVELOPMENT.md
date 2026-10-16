@@ -194,6 +194,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - 哈希不符：不运行该文件；确认官方发布物是否改变，按依赖升级流程核对。不要删除校验逻辑。
 - 文件不可写：核实目标权限、占用、Windows 错误码及空闲空间，不把所有失败都叫“空间不足”。
 - 中文入口在 CI 找不到：确认内联脚本的 shell 为 `pwsh`，本地 `.ps1` 有 UTF-8 BOM。
+- YouTube 报 “Sign in to confirm you’re not a bot”：先换 yt-dlp 多个 player_client 只读模拟；若全部被拦，是出口地址被 YouTube 标记（机房 VPS 地址常见），与版本无关。不读取/转交浏览器 Cookie。用户自建 VPS 时可在服务器上把 youtube.com、youtu.be、googlevideo.com、ytimg.com、ggpht.com、youtube-nocookie.com、youtubei.googleapis.com 一起分流到 WARP 出口（视频地址绑定请求出口，googlevideo.com 必须同一出口）；2026-10-16 用户 fscarmen sing-box 脚本已有 warp-ep，加一条路由后实测识别与下载恢复。脚本菜单重新生成配置可能冲掉该规则。
 - 缺少组件/仅有源码：运行开发准备入口；仅双击源码 ZIP 或复制一个 EXE 都不足以运行。
 
 ## 播放抓取模块（0.4.0-alpha.1）
