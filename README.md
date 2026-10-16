@@ -4,19 +4,21 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.5.1 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.5.2 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.5.1/mengren-downloader-0.5.1-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
+**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.5.2/mengren-downloader-0.5.2-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
 
-到 [v0.5.1 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.5.1) 下载 `mengren-downloader-0.5.1-windows-x64-full.zip`。
+到 [v0.5.2 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.5.2) 下载 `mengren-downloader-0.5.2-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
 2. 双击 **猛人下载器.exe**。完整便携包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。
 3. 粘贴视频链接。YouTube、B 站可以选择最高画质、1080P、720P 或 480P；小鹅通/视频号/抖音按网页提供的画质下载。
 4. 等待视频、音频下载及合并，完成后到当前电脑的系统 **下载** 文件夹查看。
 5. 窗口会再次提示粘贴链接：输入新链接继续下载，**不输入内容、直接回车就退出**。失败后也可换链接或重试；每个新任务重新选择画质。下载中按 **Ctrl+C** 只中止当前任务，窗口保留，可继续粘贴下一条链接。
+
+YouTube 如果提示“把当前网络出口当成了机器人”，说明 YouTube 暂时封了你上网的出口地址（常见于代理节点），换画质或重试都没用：请在代理软件里换一个节点，或过几个小时再试。软件不会读取你的浏览器登录来绕过这个检查。
 
 YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P 也会下载最佳的 720P。直接回车默认最高画质；竖屏上限按高度计算。
 

@@ -90,7 +90,7 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.5.1（便携版）'
+        Write-Host '猛人下载器 v0.5.2（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频或 QQ 音乐歌曲链接'
     }
@@ -214,6 +214,25 @@ try {
         if ($job -and (Test-Path -LiteralPath $job)) { Remove-Item -LiteralPath $job -Recurse -Force -ErrorAction SilentlyContinue }
     }
     if ($downloadCode -ne 0) {
+        # YouTube's "confirm you're not a bot" blocks the network exit address, not a
+        # client or version; explain it in plain words instead of the English error.
+        $botBlocked = $false
+        if (!$Probe -and $siteHost -match '(^|\.)(youtube\.com|youtu\.be)$') {
+            $previousPreference = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try {
+                $checkArgs = @('--ignore-config','--no-plugin-dirs','--no-playlist','--simulate','--no-warnings','--js-runtimes',('node:' + (Join-Path $toolRoot 'node.exe')),'--',$Url)
+                $checkText = (& (Join-Path $toolRoot 'yt-dlp.exe') @checkArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
+                $botBlocked = $checkText -match 'confirm you.{1,3}re not a bot'
+            } catch { } finally { $ErrorActionPreference = $previousPreference }
+        }
+        if ($botBlocked) {
+            Write-Host ''
+            Write-Host 'YouTube 把当前网络出口当成了“机器人”，暂时拒绝下载。这不是软件坏了，换画质或重试都没用。' -ForegroundColor Yellow
+            Write-Host '1. 在代理软件（如 Clash）里换一个节点，最好换不同地区或线路，然后重新粘贴链接。' -ForegroundColor Yellow
+            Write-Host '2. 换节点仍不行，就过几个小时再试；这类限制通常会自动解除，期间不要反复重试。' -ForegroundColor Yellow
+            Write-Host '本软件不读取浏览器登录信息，不会用你的 YouTube 账号绕过这个检查。' -ForegroundColor Yellow
+            exit 1
+        }
         Write-Host '未下载成功。请查看上方网站提示；若无匹配画质，可改选最高画质。' -ForegroundColor Yellow
         Write-Host '此工具不自动读取浏览器登录信息。' -ForegroundColor Yellow
         if ($siteHost -in @('bilibili.com','www.bilibili.com','m.bilibili.com','b23.tv')) {

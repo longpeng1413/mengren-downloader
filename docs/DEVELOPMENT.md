@@ -113,7 +113,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.5.1-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.5.2-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
