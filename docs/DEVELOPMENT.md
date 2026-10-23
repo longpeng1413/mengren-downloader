@@ -93,6 +93,7 @@ winget install --id GitHub.cli -e --source winget
 | `download.ps1` | 链接输入、画质上限、系统下载目录、yt-dlp 参数与错误处理 |
 | `bootstrap.ps1` | 固定依赖下载、哈希校验、组件准备锁 |
 | `source/*.mjs` | 两个站点的地址校验、Edge 会话、原网站 API 读取和受限本机中继 |
+| `source/download-helpers.ps1` | download.ps1 与测试共用：中断残留清理、同名加 (2) 发布、多段视频全部发布、X 网址识别、YouTube/X 常见报错转中文 |
 | `source/qqmusic.mjs` | QQ 音乐单曲：链接解析、官方接口、专用 Edge 内读取、分段下载、试听片段拒绝、标签与 .lrc 歌词 |
 | `tests/sites.test.mjs` | 链接格式、登录范围、媒体地址/清单重写回归（含 QQ 音乐） |
 | `dependencies.json` | 官方下载组件锁定清单 |
@@ -113,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.5.2-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.6.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -161,6 +162,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - 正常入口是 C# 连续会话：子任务 `-Session` 的退出码 20 仅代表空输入退出；错误返回 1 后继续；Ctrl+C 由入口拦截，只中止当前 PowerShell/下载子进程（退出码 130 同义），随后提示“已中止本次任务”并回到链接输入。每个子任务独立读取画质，避免上个任务的选择泄漏到下个任务。`download.ps1 -Url` 保持一次性调用，`--check` 不等待输入。
 - 输入使用 Console.ReadLine 与显式提示刷新，避免 Read-Host 在重定向输入下隐藏提示或阻塞。会话测试包含正式入口空输入退出及模拟成功/失败重试；真实网站连续下载仍需本机验证。
 - 公开回归样例：B 站 `BV1vL411G7N7`，抖音 `6961737553342991651`。来自上游 yt-dlp 官方测试样例，可能随时间失效；测试内容不提交、不随软件打包。
+
+### X（推特，v0.6.0）
+
+- 走与 YouTube/B 站相同的 yt-dlp 直连路径（`x.com`、`twitter.com` 及其子域名；分享文案自动提取链接）。不读取 Cookie，只支持不登录可见的公开帖子。
+- 格式优先 `b`（X 的 http 普通 MP4 自带音轨，不需合并），没有时才 `bv*+ba`；画质上限同样按高度。原因：HLS 分轨合并时 yt-dlp 读不到音频编码，`mp4/mkv` 会落到 mkv。
+- 一条帖子多段视频时 yt-dlp 无视 `--no-playlist` 全部下载，标题自带 ` #1`/` #2`；`Publish-MengrenDownloads` 发布临时目录里全部视频文件（按名字排序、同名加 (2)）。X 标题末尾 `...` 用 `--replace-in-metadata` 换成单个省略号。
+- 失败时对 YouTube/X 再以 `--simulate` 读一次报错，`Get-MengrenFailureHint` 映射为中文：需登录（NSFW/受保护）、无视频、429 限流、已删除/不可见；未知错误保持原提示。
+- 文件名长度：`--trim-filenames` 按临时目录路径动态计算（250 − 路径长 − 55，40–160），给 yt-dlp 的 `.part-FragN.part` 等后缀留余量，避免深目录 + 长标题超过 Windows 260 字符而报 "No such file"。该问题同样影响以前的 YouTube/B 站路径。
+- 实测提示：部分 X 视频带 ffmpeg 不认识的色彩空间标记（reserved），`ffmpeg -f null` 严格解码会报 Invalid color space；用 `h264_metadata` 位流过滤器改成 bt709 后完整解码正常，属原视频标记问题，常见播放器忽略。
+- 公开样例：单段 `twitter.com/captainamerica/status/719944021058060289`；多段 `x.com/primevideouk/status/1578401165338976258`（2 段）、`x.com/UltimaShadowX/status/1577719286659006464`（4 段）；竖屏 `x.com/oshtru/status/1577855540407197696`。均来自 yt-dlp 官方测试，可能失效。
 
 ### QQ 音乐（2026-10-14）
 

@@ -16,39 +16,9 @@ function Read-MengrenInput([string]$Prompt) {
     [Console]::Out.Flush()
     return [Console]::ReadLine()
 }
-# Same rules as removeAbandonedJobs in source/site-download.mjs: only our own
-# .mengren-XXXXXX folders whose owner process has exited (or, without an owner
-# record, a day old) and that contain only files.
-function Remove-MengrenAbandonedJobs([string]$Folder) {
-    $removed = 0
-    foreach ($dir in @(Get-ChildItem -LiteralPath $Folder -Directory -Force -ErrorAction SilentlyContinue)) {
-        if ($dir.Name -cnotmatch '^\.mengren-[A-Za-z0-9]{6}$') { continue }
-        try {
-            $owner = 0
-            try { $owner = [int](Get-Content -LiteralPath (Join-Path $dir.FullName '.owner') -Raw | ConvertFrom-Json).pid } catch { }
-            if ($owner -gt 0) { if (Get-Process -Id $owner -ErrorAction SilentlyContinue) { continue } }
-            elseif (((Get-Date) - $dir.LastWriteTime).TotalHours -lt 24) { continue }
-            if (@(Get-ChildItem -LiteralPath $dir.FullName -Directory -Force).Count) { continue }
-            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
-            $removed++
-        } catch { }
-    }
-    return $removed
-}
-# Publishes a finished file without replacing an existing one: name.mp4, name (2).mp4 ...
-function Save-MengrenUnique([string]$Source, [string]$Folder) {
-    $name = [IO.Path]::GetFileName($Source)
-    $stem = [IO.Path]::GetFileNameWithoutExtension($name); $ext = [IO.Path]::GetExtension($name)
-    for ($index = 1; $index -le 10000; $index++) {
-        $target = Join-Path $Folder $(if ($index -eq 1) { $name } else { "$stem ($index)$ext" })
-        if (Test-Path -LiteralPath $target) { continue }
-        try { [IO.File]::Move($Source, $target); return $target }
-        catch [IO.IOException] { if (!(Test-Path -LiteralPath $target)) { throw } }
-    }
-    throw '同名视频过多，请换一个保存文件夹。'
-}
 $toolRoot = $PSScriptRoot
 try {
+    . (Join-Path $toolRoot 'source\download-helpers.ps1')
     if ($Session -and !$Check -and !$Probe) {
         Write-Host '猛人下载器：连续下载模式'
         $Url = Read-MengrenInput '请粘贴下一条视频或 QQ 音乐歌曲链接，或输入 抓取；直接回车退出'
@@ -90,7 +60,7 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.5.2（便携版）'
+        Write-Host '猛人下载器 v0.6.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频或 QQ 音乐歌曲链接'
     }
@@ -104,7 +74,7 @@ try {
         foreach ($match in [regex]::Matches($Url,'https?://[^\s<>"“”]+')) {
             $candidate = $match.Value.TrimEnd([char[]]'。，、；;！!)]}）】')
             $candidateUri = $null
-            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|weixin\.qq\.com|y\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
+            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|x\.com|twitter\.com|weixin\.qq\.com|y\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
                 $Url = $candidate
                 break
             }
@@ -174,15 +144,24 @@ try {
     }
     $format = 'bv*+ba/b'
     if ($Quality -ne 'best') { $format = "bv*[height<=$Quality]+ba/b[height<=$Quality]" }
+    # X offers the same resolutions as plain MP4 with sound and as split HLS tracks.
+    # Prefer the plain MP4: no merge, and the result stays .mp4 for older players.
+    if (Test-MengrenXHost $siteHost) {
+        $format = 'b/bv*+ba'
+        if ($Quality -ne 'best') { $format = "b[height<=$Quality]/bv*[height<=$Quality]+ba" }
+    }
     $downloadArgs = @(
         '--ignore-config', '--no-plugin-dirs', '--no-playlist', '--encoding', 'utf-8',
         '--match-filter', '!is_live', '--format', $format,
         '--format-sort', 'res', '--ffmpeg-location', (Join-Path $toolRoot 'ffmpeg.exe'),
         '--js-runtimes', ('node:' + (Join-Path $toolRoot 'node.exe')),
         '--concurrent-fragments', '6', '--retries', '3', '--fragment-retries', '3',
-        '--socket-timeout', '30', '--windows-filenames', '--trim-filenames', '160',
+        '--socket-timeout', '30', '--windows-filenames',
         '--merge-output-format', 'mp4/mkv'
     )
+    # X titles are cut to about 50 characters and end in "..."; a single ellipsis
+    # keeps the file name from reading "text...mp4".
+    if (Test-MengrenXHost $siteHost) { $downloadArgs += @('--replace-in-metadata','title','\.{3}$','…') }
     $job = $null
     if ($Probe) {
         $downloadArgs += @('--simulate','--print','%(id)s | %(title)s | %(resolution)s | %(format_id)s')
@@ -198,39 +177,36 @@ try {
         $job = Join-Path $OutputDirectory ('.mengren-' + -join (1..6 | ForEach-Object { $letters[(Get-Random -Maximum $letters.Length)] }))
         New-Item -ItemType Directory -Path $job | Out-Null
         [IO.File]::WriteAllText((Join-Path $job '.owner'), ('{"pid":' + $PID + '}'))
-        $downloadArgs += @('--paths',$job,'--output','%(title)s.%(ext)s','--newline')
+        # Windows paths stop at 260 characters. Leave room for this folder and for
+        # yt-dlp's part/fragment suffixes (".fhls-audio-128000-Audio.mp4.part-Frag3.part")
+        # so long titles or deep save folders do not fail with "No such file".
+        $trim = [Math]::Max(40, [Math]::Min(160, 250 - $job.Length - 55))
+        $downloadArgs += @('--paths',$job,'--output','%(title)s.%(ext)s','--trim-filenames',"$trim",'--newline')
     }
     $downloadArgs += @('--',$Url)
     try {
         & (Join-Path $toolRoot 'yt-dlp.exe') @downloadArgs
         $downloadCode = $LASTEXITCODE
-        $saved = $null
-        if ($downloadCode -eq 0 -and $job) {
-            $results = @(Get-ChildItem -LiteralPath $job -File -Force | Where-Object { $_.Extension -match '^\.(mp4|mkv|webm|mov|m4v|flv)$' })
-            if ($results.Count -ne 1) { throw '下载结果不完整，没有保存。请重试。' }
-            $saved = Save-MengrenUnique $results[0].FullName $OutputDirectory
-        }
+        $saved = @()
+        if ($downloadCode -eq 0 -and $job) { $saved = @(Publish-MengrenDownloads $job $OutputDirectory) }
     } finally {
         if ($job -and (Test-Path -LiteralPath $job)) { Remove-Item -LiteralPath $job -Recurse -Force -ErrorAction SilentlyContinue }
     }
     if ($downloadCode -ne 0) {
-        # YouTube's "confirm you're not a bot" blocks the network exit address, not a
-        # client or version; explain it in plain words instead of the English error.
-        $botBlocked = $false
-        if (!$Probe -and $siteHost -match '(^|\.)(youtube\.com|youtu\.be)$') {
+        # Some failures (YouTube bot checks, X posts needing login, posts without video)
+        # are not fixed by retrying; re-read the error once and explain it in Chinese.
+        $hint = $null
+        if (!$Probe -and ($siteHost -match '(^|\.)(youtube\.com|youtu\.be)$' -or (Test-MengrenXHost $siteHost))) {
             $previousPreference = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
             try {
                 $checkArgs = @('--ignore-config','--no-plugin-dirs','--no-playlist','--simulate','--no-warnings','--js-runtimes',('node:' + (Join-Path $toolRoot 'node.exe')),'--',$Url)
                 $checkText = (& (Join-Path $toolRoot 'yt-dlp.exe') @checkArgs 2>&1 | ForEach-Object { "$_" }) -join "`n"
-                $botBlocked = $checkText -match 'confirm you.{1,3}re not a bot'
+                $hint = Get-MengrenFailureHint $siteHost $checkText
             } catch { } finally { $ErrorActionPreference = $previousPreference }
         }
-        if ($botBlocked) {
+        if ($hint) {
             Write-Host ''
-            Write-Host 'YouTube 把当前网络出口当成了“机器人”，暂时拒绝下载。这不是软件坏了，换画质或重试都没用。' -ForegroundColor Yellow
-            Write-Host '1. 在代理软件（如 Clash）里换一个节点，最好换不同地区或线路，然后重新粘贴链接。' -ForegroundColor Yellow
-            Write-Host '2. 换节点仍不行，就过几个小时再试；这类限制通常会自动解除，期间不要反复重试。' -ForegroundColor Yellow
-            Write-Host '本软件不读取浏览器登录信息，不会用你的 YouTube 账号绕过这个检查。' -ForegroundColor Yellow
+            foreach ($line in $hint) { Write-Host $line -ForegroundColor Yellow }
             exit 1
         }
         Write-Host '未下载成功。请查看上方网站提示；若无匹配画质，可改选最高画质。' -ForegroundColor Yellow
@@ -244,7 +220,8 @@ try {
         }
         exit 1
     }
-    if ($saved) { Write-Host "下载完成：$saved" -ForegroundColor Green }
+    foreach ($file in $saved) { Write-Host "下载完成：$file" -ForegroundColor Green }
+    if ($saved.Count -gt 1) { Write-Host "这条帖子有 $($saved.Count) 段视频，已全部保存。" -ForegroundColor Green }
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1

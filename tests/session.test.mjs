@@ -114,3 +114,44 @@ test('Ctrl+C stops only the running task; the window stays for the next link',as
     assert.ok(result.text.includes('已中止本次任务'));assert.equal(result.text.includes('AFTER_NATIVE'),false);
   } finally {await rm(folder,{recursive:true,force:true});}
 });
+test('Every video of a multi-video post is published, names never overwrite, and X/YouTube errors become Chinese advice',async()=>{
+  const folder=await mkdtemp(join(tmpdir(),'mengren-helpers-')),script=join(folder,'check.ps1');
+  try {
+    await writeFile(script,'﻿'+[
+      '$ErrorActionPreference = "Stop"',
+      '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
+      `. '${resolve('source/download-helpers.ps1').replace(/'/g,"''")}'`,
+      '$out = Join-Path $PSScriptRoot "out"; $job = Join-Path $out ".mengren-Ab12Cd"',
+      'New-Item -ItemType Directory -Path $job -Force | Out-Null',
+      'Set-Content -LiteralPath (Join-Path $out "Post #1.mp4") -Value "old"',
+      'foreach ($n in "Post #1.mp4","Post #2.mp4",".owner","Post #3.mp4.part") { Set-Content -LiteralPath (Join-Path $job $n) -Value $n }',
+      '$saved = @(Publish-MengrenDownloads $job $out | ForEach-Object { Split-Path $_ -Leaf })',
+      '$emptyJob = Join-Path $out ".mengren-Empty1"; New-Item -ItemType Directory -Path $emptyJob | Out-Null',
+      '$emptyError = ""; try { Publish-MengrenDownloads $emptyJob $out | Out-Null } catch { $emptyError = $_.Exception.Message }',
+      '$hint = { param($h,$t) $r = Get-MengrenFailureHint $h $t; if ($r) { $r -join "|" } else { "" } }',
+      '[pscustomobject]@{',
+      '  saved = $saved; left = @(Get-ChildItem -LiteralPath $job -Force | ForEach-Object { [string]$_.Name }); old = [IO.File]::ReadAllText((Join-Path $out "Post #1.mp4")).Trim(); emptyError = $emptyError',
+      '  hosts = @("x.com","mobile.twitter.com","twitter.com","x.com.evil.org","notx.com","youtube.com" | ForEach-Object { [bool](Test-MengrenXHost $_) })',
+      '  nsfw = & $hint "x.com" "ERROR: [twitter] 1: NSFW tweet requires authentication. Use --cookies"',
+      '  protected = & $hint "twitter.com" "ERROR: You are not authorized to view this protected tweet"',
+      '  novideo = & $hint "x.com" "ERROR: [twitter] 1: No video could be found in this tweet"',
+      '  gone = & $hint "x.com" "ERROR: [twitter] 1: This Tweet is unavailable"',
+      '  limited = & $hint "x.com" "ERROR: HTTP Error 429: Too Many Requests"',
+      '  bot = & $hint "www.youtube.com" "ERROR: Sign in to confirm you’re not a bot"',
+      '  unknown = & $hint "x.com" "ERROR: something new"',
+      '  otherSite = & $hint "www.bilibili.com" "NSFW tweet requires authentication"',
+      '} | ConvertTo-Json -Compress'
+    ].join('\r\n'));
+    const text=await new Promise((done,fail)=>{let out='';const child=spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',script],{windowsHide:true});child.stdout.on('data',d=>out+=d);child.stderr.on('data',d=>out+=d);child.on('error',fail);child.on('close',()=>done(out));});
+    const r=JSON.parse(text.trim().split(/\r?\n/).pop());
+    assert.deepEqual(r.saved,['Post #1 (2).mp4','Post #2.mp4']);
+    assert.equal(r.old,'old');
+    assert.deepEqual([...r.left].sort(),['.owner','Post #3.mp4.part']);
+    assert.match(r.emptyError,/下载结果不完整/);
+    assert.deepEqual(r.hosts,[true,true,true,false,false,false]);
+    assert.match(r.nsfw,/需要登录/);assert.match(r.protected,/需要登录/);
+    assert.match(r.novideo,/没有视频/);assert.match(r.gone,/已删除/);assert.match(r.limited,/限制了访问次数/);
+    assert.match(r.bot,/机器人/);
+    assert.equal(r.unknown,'');assert.equal(r.otherSite,'');
+  } finally {await rm(folder,{recursive:true,force:true});}
+});
