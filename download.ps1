@@ -21,7 +21,7 @@ try {
     . (Join-Path $toolRoot 'source\download-helpers.ps1')
     if ($Session -and !$Check -and !$Probe) {
         Write-Host '猛人下载器：连续下载模式'
-        $Url = Read-MengrenInput '请粘贴下一条视频或 QQ 音乐歌曲链接，或输入 抓取；直接回车退出'
+        $Url = Read-MengrenInput '请粘贴下一条视频或 QQ 音乐歌曲链接，或输入 抓取 / 登录X；直接回车退出'
         if ([string]::IsNullOrWhiteSpace($Url)) { exit 20 }
     }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -60,9 +60,13 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.6.0（便携版）'
+        Write-Host '猛人下载器 v0.7.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频或 QQ 音乐歌曲链接'
+    }
+    if ($Url -and $Url.Trim() -match '^登录\s*[Xx]$') {
+        Invoke-MengrenXLogin $toolRoot
+        exit 0
     }
     if ($Url -and $Url.Trim() -eq '抓取') {
         & (Join-Path $toolRoot 'node.exe') (Join-Path $toolRoot 'source\capture.mjs') --output $OutputDirectory
@@ -207,8 +211,17 @@ try {
         if ($hint) {
             Write-Host ''
             foreach ($line in $hint) { Write-Host $line -ForegroundColor Yellow }
-            exit 1
         }
+        # X posts that need a login (or any other X failure): read the post in the
+        # dedicated Edge after the user signs in on x.com, like the Bilibili fallback.
+        if (Test-MengrenXHost $siteHost) {
+            Write-Host '正在改用下载专用 Edge 读取。需要时请在 X 网页登录你的账号（只需第一次），软件不读取、不导出你的登录信息。'
+            $xArgs = @((Join-Path $toolRoot 'source\site-download.mjs'),'--url',$Url,'--output',$OutputDirectory,'--quality',$Quality)
+            if ($Probe) { $xArgs += '--probe' }
+            & (Join-Path $toolRoot 'node.exe') @xArgs
+            exit $LASTEXITCODE
+        }
+        if ($hint) { exit 1 }
         Write-Host '未下载成功。请查看上方网站提示；若无匹配画质，可改选最高画质。' -ForegroundColor Yellow
         Write-Host '此工具不自动读取浏览器登录信息。' -ForegroundColor Yellow
         if ($siteHost -in @('bilibili.com','www.bilibili.com','m.bilibili.com','b23.tv')) {

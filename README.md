@@ -4,13 +4,13 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-当前版本 **v0.6.0 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、X（推特）、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
+当前版本 **v0.7.0 正式版** 使用命令行窗口交互，支持 YouTube、B 站、抖音、X（推特）、QQ 音乐单曲，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。完成后可在同一个窗口继续下载。
 
 ## 下载和使用
 
-**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.6.0/mengren-downloader-0.6.0-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
+**[下载 Windows x64 正式版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.7.0/mengren-downloader-0.7.0-windows-x64-full.zip)** · [最新发布](https://github.com/longpeng1413/mengren-downloader/releases/latest)
 
-到 [v0.6.0 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.6.0) 下载 `mengren-downloader-0.6.0-windows-x64-full.zip`。
+到 [v0.7.0 正式版](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.7.0) 下载 `mengren-downloader-0.7.0-windows-x64-full.zip`。
 
 1. **完整解压**到普通文件夹，不要在压缩包内直接打开。
 2. 双击 **猛人下载器.exe**。完整便携包已经包含并校验全部下载组件，解压后即可运行，无需另找或下载组件。
@@ -46,7 +46,7 @@ YouTube、B 站选择的清晰度是上限：例如视频只有 720P，选 1080P
 
 一条帖子里有多段视频时会**全部保存**，文件名由 yt-dlp 在标题后加上 `#1`、`#2` 区分；单段视频只用标题。X 的标题本身会被截到约 50 个字，末尾的“...”会换成“…”。
 
-只支持**不登录也能看**的公开帖子。需要登录才能看的（敏感内容、年龄限制、私密账号）、只有图片没有视频的、已删除的帖子，软件会用中文说明原因；软件不读取你的 X 登录信息。
+**需要登录才能看的帖子（v0.7.0 新增）**：不登录下载失败时，软件自动打开下载专用 Edge 读取这条帖子。第一次会提示你在 X 网页登录，用 X 账号和密码登录即可；**想用 Google 登录**，先在下载器里输入 `登录X` 回车，软件会用普通方式打开专用 Edge 的 X 登录页（Google 不允许在被软件控制的浏览器里登录），登录后关掉窗口再粘贴链接。登录保存在这台电脑的专用 Edge 里，以后不用重复登录；软件不读取、不导出你的 Cookie 和密码，只读取所选帖子的视频地址，经你电脑上的系统代理从 X 官方视频服务器下载，画质上限同样有效（有的视频最高到 4K）。作者把媒体标为敏感内容时，可能还要在 X 设置“隐私与安全 → 你看到的内容”里勾选“显示可能包含敏感内容的媒体”。你的账号也看不到的帖子（年龄验证、对方限制、已删除）或只能在 X 手机 App 里看的帖子，软件会直接说明原因，不会绕过。
 
 ## QQ 音乐（v0.5.0 新增）
 

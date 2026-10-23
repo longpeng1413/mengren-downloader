@@ -229,3 +229,51 @@ test('QQ Music lists every quality with size and lets the user pick; Enter picks
     assert.equal((await chooseFormat(all,sizes,answers([]))).prefix,'M800');
   } finally {console.log=log;}
 });
+test('X post links normalise to one post and only official X video files are accepted',async()=>{
+  const {xAddress}=await import('../source/sites.mjs');
+  assert.equal(xAddress('https://twitter.com/WannakaLeaf/status/2096928135010979980?s=46&t=AbC'),'https://x.com/WannakaLeaf/status/2096928135010979980');
+  assert.equal(xAddress('https://mobile.twitter.com/someone/status/123456789/video/2'),'https://x.com/someone/status/123456789');
+  assert.equal(xAddress('https://x.com/i/web/status/123456789'),'https://x.com/i/status/123456789');
+  for(const bad of ['https://x.com.evil.org/a/status/123456789','https://x.com/someone','https://x.com/someone/status/abc','https://user:pw@x.com/a/status/123456789'])assert.equal(xAddress(bad),null,bad);
+  for(const good of ['https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1280x720/a.mp4?tag=12','https://video.twimg.com/amplify_video/1/vid/avc1/720x1280/b.mp4','https://video.twimg.com/tweet_video/G1.mp4'])assert.ok(allowedMedia('x',good),good);
+  for(const bad of ['https://video.twimg.com/ext_tw_video/1/pu/pl/a.m3u8','https://pbs.twimg.com/media/a.jpg','https://evil.org/ext_tw_video/a.mp4','http://video.twimg.com/tweet_video/G1.mp4'])assert.equal(allowedMedia('x',bad),false,bad);
+});
+test('X post data yields only the selected post videos, tells hidden posts apart, and honours the quality cap',async()=>{
+  const {xPostFromResponse,pickXRenditions,xLoginExpression}=await import('../source/x-browser.mjs');
+  const mp4=(size,bitrate,name)=>({content_type:'video/mp4',bitrate,url:`https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/${size}/${name}.mp4?tag=12`});
+  const entry=result=>({content:{itemContent:{tweet_results:{result}}}});
+  const target={__typename:'TweetWithVisibilityResults',tweet:{rest_id:'123',core:{user_results:{result:{core:{name:'人间落叶🍂'}}}},legacy:{full_text:'今天的视频 https://t.co/abc',extended_entities:{media:[
+    {type:'photo'},
+    {type:'video',video_info:{variants:[{content_type:'application/x-mpegURL',url:'https://video.twimg.com/ext_tw_video/1/pu/pl/a.m3u8'},mp4('480x270',256000,'a'),mp4('1280x720',2176000,'b'),mp4('640x360',832000,'c')]}},
+    {type:'animated_gif',video_info:{variants:[{content_type:'video/mp4',bitrate:0,url:'https://video.twimg.com/tweet_video/G1.mp4'}]}}]}}}};
+  const response={data:{instructions:[{entries:[entry({__typename:'TweetTombstone'}),entry({rest_id:'999',legacy:{full_text:'别人的回复',extended_entities:{media:[{type:'video',video_info:{variants:[mp4('1920x1080',9000000,'z')]}}]}}}),entry(target)]}]}};
+  const post=xPostFromResponse(response,'123');
+  assert.equal(post.state,'ready');assert.equal(post.title,'人间落叶🍂 - 今天的视频');assert.equal(post.videos.length,2);
+  assert.deepEqual(pickXRenditions(post.videos[0].variants).map(v=>v.height),[720,360,270]);
+  assert.deepEqual(pickXRenditions(post.videos[0].variants,'480').map(v=>v.height),[360,270]);
+  assert.deepEqual(pickXRenditions(post.videos[1].variants,'480').map(v=>v.url),['https://video.twimg.com/tweet_video/G1.mp4']);
+  assert.deepEqual(xPostFromResponse({data:{tweetResult:{result:{__typename:'TweetTombstone'}}}},'123'),{state:'tombstone'});
+  assert.equal(xPostFromResponse({data:{tweetResult:{result:{rest_id:'123',legacy:{full_text:'只有文字'}}}}},'123').state,'novideo');
+  assert.equal(xPostFromResponse({data:{}},'123'),null);
+  const long=xPostFromResponse({data:{tweetResult:{result:{rest_id:'7',legacy:{full_text:'字'.repeat(80),extended_entities:{media:[{type:'video',video_info:{variants:[mp4('640x360',1,'q')]}}]}}}}}},'7');
+  assert.equal(long.title,'X - '+'字'.repeat(50)+'…');
+  const view=(host,selectors,path='/a/status/1',text='')=>vm.runInNewContext(xLoginExpression,{location:{hostname:host,pathname:path},document:{body:{innerText:text},querySelector:s=>selectors.includes(s)?{}:null}});
+  assert.equal(view('x.com',['[data-testid="SideNav_AccountSwitcher_Button"]']).state,'in');
+  assert.equal(view('x.com',['[data-testid="loginButton"]']).state,'out');
+  assert.equal(view('x.com',[],'/i/flow/login').state,'out');
+  assert.equal(view('x.com',[],'/i/jf/onboarding/web').state,'out');
+  assert.equal(view('x.com',['a[href*="mode=login"]']).state,'out');
+  assert.equal(view('x.com',[],'/i/jf/onboarding/web','发帖 敏感内容 此帖子仅在 X 应用中可见 扫描获取应用').appOnly,true);
+  assert.equal(view('x.com',['[data-testid="SideNav_AccountSwitcher_Button"]'],'/a/status/1','This post is only visible in the X app').appOnly,true);
+  assert.equal(view('x.com',['[data-testid="SideNav_AccountSwitcher_Button"]']).appOnly,false);
+  assert.equal(view('evil.org',['[data-testid="SideNav_AccountSwitcher_Button"]']).state,'loading');
+  assert.doesNotMatch(xLoginExpression,/cookie|localStorage|sessionStorage/i);
+});
+test('Only X media goes through the user own HTTP proxy, read from the Windows setting or HTTPS_PROXY',async()=>{
+  const {parseProxySetting}=await import('../source/relay.mjs');
+  assert.deepEqual(parseProxySetting('1','127.0.0.1:7897'),{host:'127.0.0.1',port:7897});
+  assert.deepEqual(parseProxySetting('1','http=127.0.0.1:8080;https=127.0.0.1:8443'),{host:'127.0.0.1',port:8443});
+  assert.equal(parseProxySetting('0','127.0.0.1:7897'),null);
+  assert.deepEqual(parseProxySetting('0','','http://127.0.0.1:7890'),{host:'127.0.0.1',port:7890});
+  for(const bad of [['1','socks=127.0.0.1:1080'],['1','127.0.0.1:99999'],['0','','socks5://127.0.0.1:1080'],['0','','http://user:pw@127.0.0.1:8080']]) assert.equal(parseProxySetting(...bad),null,JSON.stringify(bad));
+});

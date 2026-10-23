@@ -41,6 +41,8 @@ export function allowedMedia(site,address) {
   const u=safeHttps(address); if(!u || u.hash) return false;
   if(site==='douyin')return hostIn(u.hostname,['douyinvod.com']);
   if(site==='bili')return hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
+  // X serves post videos as plain MP4 from video.twimg.com only.
+  if(site==='x')return u.hostname==='video.twimg.com'&&/^\/(?:ext_tw_video|amplify_video|tweet_video)\/[^?#]+\.mp4$/.test(u.pathname);
   // Only plain (unencrypted) full-song files from QQ Music's own audio servers.
   if(site==='qqmusic')return hostIn(u.hostname,['stream.qqmusic.qq.com'])&&/^\/(?:F000|M800|M500|C400|C200)[0-9A-Za-z]{8,32}\.(?:flac|mp3|m4a)$/.test(u.pathname);
   return site==='xiaoe' ? hostIn(u.hostname,mediaHosts) : site==='channels' && u.hostname==='finder.video.qq.com' && /^\/(?:\d+\/){2}stodownload$/.test(u.pathname);
@@ -98,6 +100,13 @@ export function biliAddress(address) {
   const id=u.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/)?.[1];if(!id)return null;
   const part=u.searchParams.get('p');if(part&&!/^[1-9]\d{0,3}$/.test(part))return null;
   return `https://www.bilibili.com/video/${id}${part?'?p='+part:''}`;
+}
+// One X post: x.com / twitter.com / mobile, with or without /video/N; returns https://x.com/<user>/status/<id>.
+export function xAddress(address) {
+  const u=safeHttps(address);
+  if(!u||u.hash||!['x.com','www.x.com','mobile.x.com','twitter.com','www.twitter.com','mobile.twitter.com'].includes(u.hostname))return null;
+  const m=u.pathname.match(/^\/(?:([A-Za-z0-9_]{1,15})\/status|i\/web\/status|i\/status)\/(\d{5,25})(?:\/(?:video|photo)\/\d{1,2})?\/?$/);
+  return m?`https://x.com/${m[1]||'i'}/status/${m[2]}`:null;
 }
 export function browserMediaAllowed(site,page,address) {
   const u=safeHttps(address);if(!u||u.hash)return false;

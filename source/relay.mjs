@@ -1,6 +1,8 @@
 import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
+import tls from 'node:tls';
+import {spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {randomUUID,createHash} from 'node:crypto';
 import {allowedMedia} from './sites.mjs';
@@ -19,11 +21,56 @@ function lookup(host,options,callback) {
     options.all ? callback(null,list) : callback(null,list[0].address,list[0].family);
   });
 }
+// Sites whose media servers are only reachable through the user's own proxy from
+// mainland networks (X's video.twimg.com). Every other site keeps connecting directly.
+const proxiedSites=new Set(['x']);
+// The Windows system proxy (Internet Settings) or HTTPS_PROXY/HTTP_PROXY; HTTP proxies only.
+export function parseProxySetting(enabled,server,environment='') {
+  let choice='';
+  if(Number(enabled)&&server) choice=server.includes('=')?(server.split(';').find(s=>s.startsWith('https='))?.slice(6)||server.split(';').find(s=>s.startsWith('http='))?.slice(5)||''):server;
+  if(!choice&&environment) {try{const u=new URL(environment);if(u.protocol==='http:'&&!u.username)choice=u.host;}catch{}}
+  const m=choice.trim().match(/^([A-Za-z0-9.-]+|\[[0-9a-fA-F:]+\]):(\d{1,5})$/);
+  return m&&Number(m[2])>0&&Number(m[2])<65536?{host:m[1].replace(/^\[|\]$/g,''),port:Number(m[2])}:null;
+}
+let cachedProxy;
+export function systemProxy() {
+  if(cachedProxy!==undefined) return cachedProxy;
+  let enabled='0',server='';
+  if(process.platform==='win32') {
+    const read=name=>spawnSync('reg',['query','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings','/v',name],{encoding:'utf8',windowsHide:true}).stdout?.match(new RegExp(name+'\\s+REG_\\w+\\s+(.+)'))?.[1]?.trim()||'';
+    enabled=String(Number(read('ProxyEnable'))||0);server=read('ProxyServer');
+  }
+  return cachedProxy=parseProxySetting(enabled,server,process.env.HTTPS_PROXY||process.env.https_proxy||process.env.HTTP_PROXY||process.env.http_proxy||'');
+}
+// TLS through an HTTP CONNECT tunnel; the certificate of the real site is still verified.
+function proxiedConnection(proxy,host,port) {
+  return (options,created)=>{
+    const tunnel=http.request({host:proxy.host,port:proxy.port,method:'CONNECT',path:`${host}:${port}`,headers:{Host:`${host}:${port}`},timeout:30000,agent:false});
+    tunnel.on('timeout',()=>tunnel.destroy(new Error('代理连接超时')));
+    tunnel.on('error',error=>created(error));
+    tunnel.on('connect',(answer,socket,head)=>{
+      if(answer.statusCode!==200){socket.destroy();created(new Error('代理拒绝连接'));return;}
+      if(head.length) socket.unshift(head);
+      const secure=tls.connect({socket,servername:host});
+      secure.once('secureConnect',()=>created(null,secure));secure.once('error',error=>created(error));
+    });
+    tunnel.end();
+  };
+}
 export async function guardedGet(site,address,referer,range,depth=0) {
   if(depth>5 || !allowedMedia(site,address)) throw new Error('媒体地址不在该网站的允许范围内');
   const url=new URL(address);
+  const proxy=proxiedSites.has(site)?systemProxy():null;
+  if(proxy) {
+    // The proxy resolves the name; still refuse a local answer that points inside the LAN.
+    const local=await dns.promises.lookup(url.hostname,{all:true}).catch(()=>[]);
+    if(local.some(a=>!publicIp(a.address))) throw new Error('媒体域名解析到了内网地址，已拒绝');
+  }
   const response=await new Promise((resolve,reject)=>{
-    const request=https.get(url,{lookup,headers:{'User-Agent':'Mozilla/5.0','Referer':referer,...(range?{'Range':range}:{})}},resolve);
+    // No `agent` here: with agent:false Node builds its own agent and silently
+    // ignores createConnection, which would bypass the proxy.
+    const connection=proxy?{createConnection:proxiedConnection(proxy,url.hostname,Number(url.port)||443)}:{lookup};
+    const request=https.get(url,{...connection,headers:{'User-Agent':'Mozilla/5.0','Referer':referer,...(range?{'Range':range}:{})}},resolve);
     request.setTimeout(30000,()=>request.destroy(new Error('媒体读取超时')));
     request.on('error',()=>reject(new Error('媒体读取失败，请刷新原页面后重试')));
   });

@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.6.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.7.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -171,6 +171,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - 失败时对 YouTube/X 再以 `--simulate` 读一次报错，`Get-MengrenFailureHint` 映射为中文：需登录（NSFW/受保护）、无视频、429 限流、已删除/不可见；未知错误保持原提示。
 - 文件名长度：`--trim-filenames` 按临时目录路径动态计算（250 − 路径长 − 55，40–160），给 yt-dlp 的 `.part-FragN.part` 等后缀留余量，避免深目录 + 长标题超过 Windows 260 字符而报 "No such file"。该问题同样影响以前的 YouTube/B 站路径。
 - 实测提示：部分 X 视频带 ffmpeg 不认识的色彩空间标记（reserved），`ffmpeg -f null` 严格解码会报 Invalid color space；用 `h264_metadata` 位流过滤器改成 bt709 后完整解码正常，属原视频标记问题，常见播放器忽略。
+- **登录读取（v0.7.0）**：yt-dlp 失败时（任何原因）download.ps1 调 `site-download.mjs`，`xAddress` 命中后走 `source/x-browser.mjs` 的 `resolveX`：新开 about:blank 标签、`Network.enable` 后再导航，只收集 `/i/api/graphql/*/TweetDetail` 与 `TweetResultByRestId` 的响应体（≤15MB，解析后丢弃），`xPostFromResponse` 只取 rest_id 等于所选帖子的 video/animated_gif 的 mp4 变体（含 TweetWithVisibilityResults 包装；TweetTombstone 视为隐藏）。登录判断只看页面：账号按钮=已登录；`/i/jf/onboarding`、`/i/flow/login`、登录按钮或 `mode=login` 链接=未登录；正文含“仅在 X 应用中可见”判为 App 专享。登录后 X 落在首页时重新打开帖子一次。成功后关闭本次标签，失败保留。不读 Cookie/存储，不自造 API 请求。
+- 画质：`pickXRenditions` 只留白名单 mp4，按码率排序；有上限时按地址里的 WxH 高度筛选，GIF（tweet_video 无尺寸）任何上限都保留。多段逐段经 `downloadResolved`（标题加 #1/#2）。白名单 `allowedMedia('x')`：仅 `video.twimg.com` 下 ext_tw_video/amplify_video/tweet_video 的 .mp4。
+- **代理**：`relay.mjs` 的 `guardedGet` 对 `proxiedSites`（目前只有 x）读取 Windows 系统代理（注册表 ProxyEnable/ProxyServer，退回 HTTPS_PROXY/HTTP_PROXY，仅 HTTP 代理），以 CONNECT 隧道 + TLS（照常校验证书）取媒体；本机解析若指向内网仍拒绝。注意 `https.get` 同时给 `agent:false` 和 `createConnection` 时后者被忽略而直连。其他站点仍直连。
+- **`登录X`**：Google 拒绝在带远程调试的浏览器里登录（“此浏览器或应用可能不安全”）。`Invoke-MengrenXLogin`（download-helpers.ps1）先用 `node source/browser.mjs --close` 经 CDP `Browser.close` 关掉受控的专用 Edge，再以无调试参数用同一配置目录打开 `https://x.com/i/flow/login`，轮询本配置目录的 msedge 进程直到用户关闭。只是让用户在普通浏览器里登录，不伪装、不绕过检测。
 - 公开样例：单段 `twitter.com/captainamerica/status/719944021058060289`；多段 `x.com/primevideouk/status/1578401165338976258`（2 段）、`x.com/UltimaShadowX/status/1577719286659006464`（4 段）；竖屏 `x.com/oshtru/status/1577855540407197696`。均来自 yt-dlp 官方测试，可能失效。
 
 ### QQ 音乐（2026-10-14）

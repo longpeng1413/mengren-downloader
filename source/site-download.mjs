@@ -4,6 +4,7 @@ import {dirname,join,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {constants} from 'node:fs';
 import {resolveSource} from './source-resolver.mjs';
+import {xAddress} from './sites.mjs';
 import {createRelay} from './relay.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const message=text=>console.log(String(text).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]'));
@@ -89,12 +90,34 @@ export async function saveCompleted(source,output,name) {
   throw Error('同名视频过多，请更改课程名称或保存目录');
 }
 export async function downloadSite(address,output,{probe=false,quality='best',timeout}={}) {
+  if(xAddress(address)) return downloadX(address,output,{probe,quality,timeout});
   const info=await resolveSource(address,{timeout,notify:message,isCancelled:()=>cancelled,quality});
   return downloadResolved(info,address,output,{probe});
 }
+// X posts that need a login: read the post in the dedicated Edge, then save every
+// video of it. Titles get " #1", " #2" like yt-dlp's names for the public path.
+async function downloadX(address,output,{probe,quality,timeout}) {
+  const {resolveX}=await import('./x-browser.mjs');
+  const post=await resolveX(address,{quality,timeout,notify:message,isCancelled:()=>cancelled});
+  const many=post.videos.length>1;
+  if(probe) {
+    message('已识别：'+post.title);
+    post.videos.forEach((video,index)=>message(`${many?'第 '+(index+1)+' 段：':''}可下载 ${video.renditions.map(r=>r.height?r.width+'x'+r.height:'未知尺寸').join('、')}`));
+    message('视频来源验证成功。');
+    return {site:'x',title:post.title,videos:post.videos.length};
+  }
+  const files=[];
+  for(const [index,video] of post.videos.entries()) {
+    if(cancelled) throw new Error('下载已取消');
+    const title=many?`${post.title} #${index+1}`:post.title;
+    files.push((await downloadResolved({site:'x',page:post.page,title,mediaUrl:video.renditions[0].url,renditions:video.renditions},address,output)).file);
+  }
+  if(many) message(`这条帖子有 ${files.length} 段视频，已全部保存。`);
+  return {site:'x',title:post.title,files};
+}
 export async function downloadResolved(info,address,output,{probe=false,relayOptions={}}={}) {
   message('已识别：'+info.title);
-  message(info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
+  message(info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':info.site==='x'?'将按所选画质上限下载 X 网页提供的视频。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
   const outputPath=resolve(output);message('保存位置：'+outputPath);
   if(!probe) {await mkdir(outputPath,{recursive:true});if(await removeAbandonedJobs(outputPath))message('已清理上次中断留下的临时文件。');}
   const job=probe?null:await mkdtemp(join(outputPath,'.mengren-'));
@@ -137,7 +160,7 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         if(cancelled) throw new Error('下载已取消');
         lastError=error;
         if(job) for(const file of await readdir(job)) if(file!==ownerFile) await unlink(join(job,file)).catch(()=>{});
-        if(choices.length>1) message('这条回放线路未成功，正在尝试下一条网站提供的线路。');
+        if(choices.length>1) message(info.site==='x'?'这个画质下载未成功，改试下一档。':'这条回放线路未成功，正在尝试下一条网站提供的线路。');
       } finally {await relay.close();}
     }
     throw new Error(lastError?.message || '没有可用视频线路');

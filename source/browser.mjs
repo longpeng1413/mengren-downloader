@@ -1,12 +1,17 @@
 import {existsSync, mkdirSync, readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export class Cdp {
   constructor(socket) {
-    this.socket = socket; this.serial = 0; this.pending = new Map();
+    this.socket = socket; this.serial = 0; this.pending = new Map(); this.listeners = new Map();
     socket.addEventListener('message', event => {
       let data; try { data = JSON.parse(event.data); } catch { return; }
+      if (data.method) {
+        for (const listener of this.listeners.get(data.method) || []) { try { listener(data.params || {}, data.sessionId); } catch { } }
+        return;
+      }
       const call = this.pending.get(data.id); if (!call) return;
       this.pending.delete(data.id); clearTimeout(call.timer);
       data.error ? call.reject(new Error('浏览器读取失败')) : call.resolve(data.result);
@@ -34,6 +39,12 @@ export class Cdp {
       this.socket.send(JSON.stringify({id,method,params,...(sessionId ? {sessionId} : {})}));
     });
   }
+  // Browser events such as Network.responseReceived; returns a function that stops listening.
+  on(method, listener) {
+    if (!this.listeners.has(method)) this.listeners.set(method, new Set());
+    this.listeners.get(method).add(listener);
+    return () => this.listeners.get(method)?.delete(listener);
+  }
   async attach(targetId) { return (await this.call('Target.attachToTarget', {targetId,flatten:true})).sessionId; }
   async evaluate(sessionId, expression) {
     const answer = await this.call('Runtime.evaluate', {expression,awaitPromise:true,returnByValue:true}, sessionId);
@@ -60,21 +71,30 @@ export class Cdp {
   }
   close() { this.socket.close(); }
 }
+const profileDir = () => join(process.env.LOCALAPPDATA,'MengrenDownloader','BrowserProfile');
+// Connects only to our own dedicated Edge (its DevToolsActivePort file); never starts one.
+async function existing() {
+  try {
+    const [port, endpoint] = readFileSync(join(profileDir(),'DevToolsActivePort'),'utf8').trim().split(/\r?\n/);
+    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535 || !endpoint?.startsWith('/devtools/browser/')) return null;
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`,{signal:AbortSignal.timeout(1500)});
+    const version = await response.json();
+    if (version.webSocketDebuggerUrl !== `ws://127.0.0.1:${port}${endpoint}`) return null;
+    return await Cdp.connect(version.webSocketDebuggerUrl);
+  } catch { return null; }
+}
+// Closes the dedicated Edge we control (logins stay in its profile). Used before
+// opening it normally for sites such as Google that refuse controlled browsers.
+export async function closeDedicatedBrowser() {
+  if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) return false;
+  const browser = await existing(); if (!browser) return false;
+  try { await browser.call('Browser.close'); } catch { }
+  browser.close(); return true;
+}
 export async function ensureBrowser() {
   if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) throw new Error('浏览器读取需要 Windows 和 Edge');
-  const profile = join(process.env.LOCALAPPDATA,'MengrenDownloader','BrowserProfile');
+  const profile = profileDir();
   mkdirSync(profile,{recursive:true});
-  const marker = join(profile,'DevToolsActivePort');
-  async function existing() {
-    try {
-      const [port, endpoint] = readFileSync(marker,'utf8').trim().split(/\r?\n/);
-      if (!/^\d+$/.test(port) || +port < 1 || +port > 65535 || !endpoint?.startsWith('/devtools/browser/')) return null;
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`,{signal:AbortSignal.timeout(1500)});
-      const version = await response.json();
-      if (version.webSocketDebuggerUrl !== `ws://127.0.0.1:${port}${endpoint}`) return null;
-      return await Cdp.connect(version.webSocketDebuggerUrl);
-    } catch { return null; }
-  }
   const active = await existing(); if (active) return active;
   const executable = [process.env['ProgramFiles(x86)'],process.env.ProgramFiles,process.env.LOCALAPPDATA]
     .filter(Boolean).map(base => join(base,'Microsoft','Edge','Application','msedge.exe')).find(existsSync);
@@ -85,3 +105,6 @@ export async function ensureBrowser() {
   throw new Error('下载专用 Edge 窗口未能启动；请关闭该专用窗口后重试，不需要关闭日常 Edge');
 }
 export {sleep};
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv.includes('--close')) {
+  console.log((await closeDedicatedBrowser()) ? '已关闭被下载器控制的专用 Edge。' : '被下载器控制的专用 Edge 没有在运行。');
+}
