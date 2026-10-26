@@ -21,7 +21,7 @@ try {
     . (Join-Path $toolRoot 'source\download-helpers.ps1')
     if ($Session -and !$Check -and !$Probe) {
         Write-Host '猛人下载器：连续下载模式'
-        $Url = Read-MengrenInput '请粘贴下一条视频或 QQ 音乐歌曲链接，或输入 抓取 / 登录X；直接回车退出'
+        $Url = Read-MengrenInput '请粘贴下一条视频、QQ 音乐或喜马拉雅链接，或输入 抓取 / 登录X；直接回车退出'
         if ([string]::IsNullOrWhiteSpace($Url)) { exit 20 }
     }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -60,9 +60,9 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v0.7.0（便携版）'
+        Write-Host '猛人下载器 v0.8.0（便携版）'
         Write-Host "默认保存位置：$OutputDirectory"
-        $Url = Read-MengrenInput '请粘贴视频或 QQ 音乐歌曲链接'
+        $Url = Read-MengrenInput '请粘贴视频、QQ 音乐或喜马拉雅链接'
     }
     if ($Url -and $Url.Trim() -match '^登录\s*[Xx]$') {
         Invoke-MengrenXLogin $toolRoot
@@ -78,7 +78,7 @@ try {
         foreach ($match in [regex]::Matches($Url,'https?://[^\s<>"“”]+')) {
             $candidate = $match.Value.TrimEnd([char[]]'。，、；;！!)]}）】')
             $candidateUri = $null
-            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|x\.com|twitter\.com|weixin\.qq\.com|y\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
+            if ([Uri]::TryCreate($candidate,[UriKind]::Absolute,[ref]$candidateUri) -and $candidateUri.DnsSafeHost -match '(^|\.)(douyin\.com|iesdouyin\.com|bilibili\.com|b23\.tv|youtube\.com|youtu\.be|x\.com|twitter\.com|ximalaya\.com|xima\.tv|weixin\.qq\.com|y\.qq\.com|xet\.tech|xetslk\.com|xetlk\.com)$') {
                 $Url = $candidate
                 break
             }
@@ -89,6 +89,14 @@ try {
         throw '请输入完整的 http 或 https 视频网页链接。'
     }
     $siteHost = $parsed.DnsSafeHost.ToLowerInvariant()
+    if ($siteHost -match '(^|\.)ximalaya\.com$' -or $siteHost -eq 'xima.tv') {
+        Write-Host '喜马拉雅：在下载专用 Edge 里读取专辑目录（需要登录喜马拉雅），保留原始 m4a 格式。'
+        Write-Host '只下载你的账号能完整收听的单集；不下载试听片段，不处理加密文件，不读取你的登录信息。'
+        $xmlyArgs = @((Join-Path $toolRoot 'source\ximalaya.mjs'),'--url',$Url,'--output',$OutputDirectory)
+        if ($Probe) { $xmlyArgs += '--probe' }
+        & (Join-Path $toolRoot 'node.exe') @xmlyArgs
+        exit $LASTEXITCODE
+    }
     if ($siteHost -eq 'y.qq.com' -or $siteHost.EndsWith('.y.qq.com')) {
         $musicQuality = 'standard'
         if ($Quality) { if ($Quality -eq 'best') { $musicQuality = 'best' } }

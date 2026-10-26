@@ -34,7 +34,8 @@ export class Cdp {
   call(method, params = {}, sessionId) {
     return new Promise((resolve, reject) => {
       const id = ++this.serial;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('网页响应超时')); }, 35000);
+      // Keep the step name on the error so a stalled step can be diagnosed.
+      const timer = setTimeout(() => { this.pending.delete(id); reject(Object.assign(new Error('网页响应超时'), {method})); }, 35000);
       this.pending.set(id, {resolve,reject,timer});
       this.socket.send(JSON.stringify({id,method,params,...(sessionId ? {sessionId} : {})}));
     });

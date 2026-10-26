@@ -157,8 +157,8 @@ async function browserFormats(track,{timeout}) {
 // QQ Music limits each connection to about playback speed, so fetch 1 MiB ranges over a
 // few connections. Every range goes through the relay's host/IP checks and must return
 // exactly the requested bytes of the same total size.
-export async function fetchAudio(url,file,{workers=4,chunk=1048576,get=guardedGet}={}) {
-  const referer='https://y.qq.com/',first=await get('qqmusic',url,referer,'bytes=0-0');
+export async function fetchAudio(url,file,{workers=4,chunk=1048576,get=guardedGet,site='qqmusic',referer='https://y.qq.com/'}={}) {
+  const first=await get(site,url,referer,'bytes=0-0');
   const total=Number(first.response.headers['content-range']?.match(/^bytes 0-0\/(\d+)$/)?.[1]);first.response.destroy();
   if(!(total>0)||total>4*1024**3) throw new Error('音频服务器没有返回有效的文件大小');
   const handle=await open(file,'w'),started=Date.now(),mib=(total/1048576).toFixed(2);
@@ -175,7 +175,7 @@ export async function fetchAudio(url,file,{workers=4,chunk=1048576,get=guardedGe
       for(let attempt=1;;attempt++) {
         let written=0;
         try {
-          const {response}=await get('qqmusic',url,referer,`bytes=${from}-${to}`);
+          const {response}=await get(site,url,referer,`bytes=${from}-${to}`);
           if(response.statusCode!==206||response.headers['content-range']!==`bytes ${from}-${to}/${total}`) {response.destroy();throw new Error('音频分段不完整');}
           for await(const data of response) {
             if(failed||isCancelled()) {response.destroy();throw failed||new Error('下载已取消');}

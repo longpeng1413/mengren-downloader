@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.7.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.8.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -176,6 +176,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - **代理**：`relay.mjs` 的 `guardedGet` 对 `proxiedSites`（目前只有 x）读取 Windows 系统代理（注册表 ProxyEnable/ProxyServer，退回 HTTPS_PROXY/HTTP_PROXY，仅 HTTP 代理），以 CONNECT 隧道 + TLS（照常校验证书）取媒体；本机解析若指向内网仍拒绝。注意 `https.get` 同时给 `agent:false` 和 `createConnection` 时后者被忽略而直连。其他站点仍直连。
 - **`登录X`**：Google 拒绝在带远程调试的浏览器里登录（“此浏览器或应用可能不安全”）。`Invoke-MengrenXLogin`（download-helpers.ps1）先用 `node source/browser.mjs --close` 经 CDP `Browser.close` 关掉受控的专用 Edge，再以无调试参数用同一配置目录打开 `https://x.com/i/flow/login`，轮询本配置目录的 msedge 进程直到用户关闭。只是让用户在普通浏览器里登录，不伪装、不绕过检测。
 - 公开样例：单段 `twitter.com/captainamerica/status/719944021058060289`；多段 `x.com/primevideouk/status/1578401165338976258`（2 段）、`x.com/UltimaShadowX/status/1577719286659006464`（4 段）；竖屏 `x.com/oshtru/status/1577855540407197696`。均来自 yt-dlp 官方测试，可能失效。
+
+### 喜马拉雅（v0.8.0）
+
+- 入口：download.ps1 对 `ximalaya.com` 子域名与 `xima.tv` 调 `source/ximalaya.mjs --url --output [--probe] [--select 范围]`；分享文案自动提取。`xmlyTarget` 识别 album/sound、`/gatekeeper/podcast-share/album/ID`、`xima.tv` 短链（只在 xima.tv 与 ximalaya.com 内跟随跳转）。
+- 目录：`/revision/album/v1/getTracksList` 不登录返回 401，且必须带网页 JS 现算的 webtk（自造请求返回 407 “webtk缺失”）。不研究 webtk 算法；在专用 Edge 打开专辑页，监听网页自己发出的 getTracksList/simple 响应体（解析后丢弃），先点“正序”使第 1 页从第 1 集开始（首屏常是服务端渲染、无接口请求），再按页码点击翻页（每页 30 集）。yt-dlp 2026.08.19 的 ximalaya:album 因同一原因失效（KeyError data）。
+- 登录判断：在网页内 `fetch(location.origin+"/revision/main/getCurrentUser")` 只取是否登录/是否会员；未登录提示用户登录并轮询，不刷新页面以免打断登录。打开页面必须“about:blank → Page.navigate”，`Target.createTarget` 直接带网址时 Runtime 曾跑在 origin=null 的上下文里。
+- 音频：免费单集取公开 `m.ximalaya.com/tracks/ID.json` 的 play_path_64/32（不带 Cookie）；付费/会员或失败时在网页里点 `[class*=play-btn]`（注入脚本把所有 HTMLMediaElement 播放静音），从 `Network.requestWillBeSent` 取 xmcdn 音频地址（付费地址带 duration 参数），随后导航到 about:blank 停止播放。不使用 yt-dlp 的 VIP 路径（它用写死的 RC4 钥匙解密 URL 参数，属破解，且不登录时会悄悄换成试听样本）。
+- 下载：复用 qqmusic.mjs 的 `fetchAudio`（新增 site/referer 参数，4 连接 × 1MiB 分段）与 `checkAudio`（完整解码，时长短于整集即拒绝）；白名单 `allowedMedia('ximalaya')` 仅 `*.xmcdn.com` 的 m4a/mp3/aac；中继对 ximalaya 使用完整浏览器 User-Agent（简短 “Mozilla/5.0” 被 xmcdn 返回 403）。ffmpeg 复制写入 title/artist/album/track 标签。保存到 `<下载>/<专辑名第一个|前>/NNN. 标题.m4a`（NNN 至少 3 位），已存在同名文件即跳过；每集一个 `.mengren-` 临时目录，开始时清理中断残留。
+- 防刷：快速翻页（约 0.4 秒/页）多次后网站返回 ret 407 “高优拦截端恶意请求”，之后点击翻页也无请求。现在每页间隔 1.5 秒、每集间隔 1 秒；检测到非 200/401 的 ret 立即停止并提示过半小时再试，不自动重试、不伪装。后台标签会被 Edge 降速，打开后 `Target.activateTarget` + `Emulation.setFocusEmulationEnabled`。同站残留标签可能拖住共享渲染进程，结束时总是关闭本次标签（仅登录超时保留）；浏览器步骤超时（错误带 method）时换新标签重试一次。
+- 公开样例：`xima.tv/1_CbQXmk`（专辑 5625249《生命的真相(一念行者)》，827 集全免费）。需登录。
 
 ### QQ 音乐（2026-10-14）
 

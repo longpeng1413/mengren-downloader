@@ -24,6 +24,10 @@ function lookup(host,options,callback) {
 // Sites whose media servers are only reachable through the user's own proxy from
 // mainland networks (X's video.twimg.com). Every other site keeps connecting directly.
 const proxiedSites=new Set(['x']);
+// Ximalaya's audio servers answer 403 to a bare "Mozilla/5.0"; send a full browser
+// identity there only. Other sites keep the short one they were verified with.
+export const browserAgent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
+const siteAgents={ximalaya:browserAgent};
 // The Windows system proxy (Internet Settings) or HTTPS_PROXY/HTTP_PROXY; HTTP proxies only.
 export function parseProxySetting(enabled,server,environment='') {
   let choice='';
@@ -70,7 +74,7 @@ export async function guardedGet(site,address,referer,range,depth=0) {
     // No `agent` here: with agent:false Node builds its own agent and silently
     // ignores createConnection, which would bypass the proxy.
     const connection=proxy?{createConnection:proxiedConnection(proxy,url.hostname,Number(url.port)||443)}:{lookup};
-    const request=https.get(url,{...connection,headers:{'User-Agent':'Mozilla/5.0','Referer':referer,...(range?{'Range':range}:{})}},resolve);
+    const request=https.get(url,{...connection,headers:{'User-Agent':siteAgents[site]||'Mozilla/5.0','Referer':referer,...(range?{'Range':range}:{})}},resolve);
     request.setTimeout(30000,()=>request.destroy(new Error('媒体读取超时')));
     request.on('error',()=>reject(new Error('媒体读取失败，请刷新原页面后重试')));
   });

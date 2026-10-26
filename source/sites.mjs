@@ -41,6 +41,8 @@ export function allowedMedia(site,address) {
   const u=safeHttps(address); if(!u || u.hash) return false;
   if(site==='douyin')return hostIn(u.hostname,['douyinvod.com']);
   if(site==='bili')return hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
+  // Ximalaya audio comes from its own CDN (aod.cos.tx.xmcdn.com, a.xmcdn.com …); audio files only.
+  if(site==='ximalaya')return hostIn(u.hostname,['xmcdn.com'])&&/\.(?:m4a|mp3|aac)$/i.test(u.pathname);
   // X serves post videos as plain MP4 from video.twimg.com only.
   if(site==='x')return u.hostname==='video.twimg.com'&&/^\/(?:ext_tw_video|amplify_video|tweet_video)\/[^?#]+\.mp4$/.test(u.pathname);
   // Only plain (unencrypted) full-song files from QQ Music's own audio servers.
