@@ -31,7 +31,7 @@ try {
     Write-Host '编译入口并生成公开便携包。'
     & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\build.ps1') -Package
     if ($LASTEXITCODE -ne 0) { throw '构建失败；请查看上方错误。' }
-    & (Join-Path $root '猛人下载器.exe') --check
+    & (Join-Path $root '猛人下载器-命令行版.exe') --check
     if ($LASTEXITCODE -ne 0) { throw '组件准备或启动验证失败；修复网络/权限后可重跑，已校验的组件会复用。' }
     Write-Host '开发环境已准备好，可以继续修改和测试。未下载视频，也未登录或推送 GitHub。' -ForegroundColor Green
 } catch {

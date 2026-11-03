@@ -3,7 +3,7 @@ export function describeCapture(item) {
   return '['+item.id+'] '+(item.title||'课程名读取中（可用“命名 编号 名称”补充）')+' | '+({video:'视频',hls:'分段视频',track:'音频/独立片段'}[item.kind])+' | '+(item.size?(item.size/1048576).toFixed(1)+' MiB':'大小待下载后确认')+(item.courseOrder?' | 课程序号 '+item.courseOrder+'（'+(item.orderSource==='manual'?'手动':'网站')+'）':'')+(item.source==='course-list'?' | 课程列表来源，下载时验证':'')+(item.downloaded?' | 已下载':'');
 }
 export const isAllCapture=input=>['全部','全部下载','下载全部'].includes(input.replace(/\s+/g,''));
-function manualTitle(input){const title=courseTitle(input);if(!title)return null;const command=title.replace(/^\d+[.．、:：]\s*/, '');return isAllCapture(command)||['列表','清空','退出','序号','命名','q','l'].includes(command.toLowerCase())||/^[\d,，、 -]+$/.test(command)?null:title;}
+export function manualTitle(input){const title=courseTitle(input);if(!title)return null;const command=title.replace(/^\d+[.．、:：]\s*/, '');return isAllCapture(command)||['列表','清空','退出','序号','命名','q','l'].includes(command.toLowerCase())||/^[\d,，、 -]+$/.test(command)?null:title;}
 export const captureHelp='直接输入数字下载，例如 1；批量输入 1-8 或 1,3,5；输入 全部 / 全部下载 / 下载全部，下载列表中尚未下载的视频。\n列表 查看；命名 1 课程名称 修改名称；序号 1 13 把编号1设为第13课；清空 清除候选；直接回车退出抓取并恢复网络。\n文件序号优先网站明确序号；未提供则用本次列表编号（采集顺序），不是本次下载队列中的名次。';
 export function selectCapture(input,items) {
   if(isAllCapture(input))return items.filter(x=>x.kind!=='track'&&!x.downloaded);
@@ -17,6 +17,58 @@ export function selectCapture(input,items) {
     if(ids.length>200)throw Error('一次最多选择 200 个编号。');
   }
   return ids.map(id=>{const item=items.find(x=>x.id===id);if(!item)throw Error('列表没有编号 '+id+'，未开始下载；请先输入 列表。');if(item.kind==='track')throw Error('编号 '+id+' 是音频或独立片段，请选择视频或分段视频。');return item;});
+}
+// The window version sends commands as objects (rename / order / clear / download)
+// instead of typed text; the same name and selection checks apply. Downloads run one
+// at a time in the background so the list keeps updating and accepting commands.
+export function captureSnapshot(items) {
+  return items.map(i=>({id:i.id,title:i.title||'',kind:i.kind,size:i.size||0,courseOrder:i.courseOrder||null,orderSource:i.orderSource||null,source:i.source||null,downloaded:Boolean(i.downloaded),state:i.guiState||null,reason:i.guiReason||null}));
+}
+export async function runCaptureGui({catalog,next,download,emit,shouldQuit=()=>false}) {
+  const publish=()=>emit({type:'capture',items:captureSnapshot(catalog.items)});
+  const notice=text=>emit({type:'notice',text});
+  const queue=[];let working=null;
+  const work=async()=>{
+    while(queue.length&&!shouldQuit()) {
+      const item=queue.shift();item.guiState='run';item.guiReason=null;publish();
+      emit({type:'capture-start',id:item.id,title:item.title});
+      try {
+        const result=await download({...item});
+        item.downloaded=true;item.guiState='ok';emit({type:'capture-done',id:item.id,ok:true,title:item.title,file:result?.file||null});
+      } catch(error) {
+        if(shouldQuit())break;
+        item.guiState='fail';item.guiReason=String(error.message).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]');
+        emit({type:'capture-done',id:item.id,ok:false,title:item.title,reason:item.guiReason});
+      }
+      publish();
+    }
+    working=null;
+  };
+  publish();
+  while(!shouldQuit()) {
+    const command=await next();
+    if(!command||command.cmd==='stop')break;
+    const item=catalog.items.find(x=>x.id===Number(command.id));
+    if(command.cmd==='rename') {
+      const title=manualTitle(String(command.title??''));
+      if(item&&title){item.title=title;item.titleSource='manual';}
+      else notice('名称没有修改：不能为空、不能包含网址，也不能是下载指令。');
+    } else if(command.cmd==='order') {
+      const order=Number(command.order);
+      if(item&&Number.isInteger(order)&&order>=1&&order<=10000){item.courseOrder=order;item.orderSource='manual';}
+      else notice('序号要填 1 到 10000 之间的整数。');
+    } else if(command.cmd==='clear') {
+      if(working||queue.length) notice('正在下载时不能清空列表。');else catalog.clear();
+    } else if(command.cmd==='download') {
+      const picked=(Array.isArray(command.ids)?command.ids:[]).slice(0,200).map(id=>catalog.items.find(x=>x.id===Number(id)))
+        .filter(x=>x&&x.kind!=='track'&&!x.downloaded&&!['wait','run'].includes(x.guiState));
+      const missing=picked.filter(x=>!x.title);
+      if(!picked.length) notice('没有可以下载的视频：已下载过的、正在排队的和音频片段不会重复下载。');
+      else if(missing.length) notice('编号 '+missing.map(x=>x.id).join('、')+' 的课程名还没读到，请先在表格里填写名称再下载。');
+      else {for(const x of picked){x.guiState='wait';queue.push(x);}working??=work();}
+    }
+    publish();
+  }
 }
 export async function runCaptureMenu({catalog,ask,download,log=console.log,shouldQuit=()=>false}) {
   log(captureHelp);

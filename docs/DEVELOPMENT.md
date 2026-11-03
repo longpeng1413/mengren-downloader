@@ -89,7 +89,13 @@ winget install --id GitHub.cli -e --source winget
 
 | 文件 | 职责 |
 | --- | --- |
-| `source/Launcher.cs` | 带图标的 C# 控制台入口，启动项目内下载脚本 |
+| `source/GuiLauncher.cs` | 编译为 `猛人下载器.exe`（无控制台窗口）：隐藏启动 `node.exe source/gui-server.mjs`，等它输出 ready，出错时弹窗说明 |
+| `source/Launcher.cs` | 编译为 `猛人下载器-命令行版.exe`：带图标的 C# 控制台入口，循环启动 `download.ps1 -Session`；`--check` 自检也在这里 |
+| `source/gui-server.mjs` | 窗口版本机服务：127.0.0.1 + 每次随机口令，识别链接、单任务队列、设置/记录、存储清理、登录页、抓取桥接、自动更新、Edge 应用窗口与退出清理 |
+| `source/gui-core.mjs` | 窗口版纯函数：链接提取与网站分类、下载输出解析、集数范围压缩、记录上限（测试直接引用） |
+| `source/ui/` | 窗口版页面（index.html、style.css、app.js），只由本机服务提供 |
+| `source/updater.mjs`、`source/apply-update.ps1` | 自动更新：查 GitHub Releases、经系统代理下载完整包并按 SHA256SUMS-full.txt 校验（可续传）；退出后覆盖安装 |
+| `source/version.mjs` | 窗口版读取的版本号与是否预览版 |
 | `download.ps1` | 链接输入、画质上限、系统下载目录、yt-dlp 参数与错误处理 |
 | `bootstrap.ps1` | 固定依赖下载、哈希校验、组件准备锁 |
 | `source/*.mjs` | 两个站点的地址校验、Edge 会话、原网站 API 读取和受限本机中继 |
@@ -110,11 +116,11 @@ winget install --id GitHub.cli -e --source winget
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Package
 if ($LASTEXITCODE -ne 0) { throw '构建失败' }
-.\猛人下载器.exe --check
+.\猛人下载器-命令行版.exe --check
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.8.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`（窗口版入口）、`猛人下载器-命令行版.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.9.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -196,6 +202,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - `checkAudio` 完整解码，以最后的 `time=` 为实际时长；短于整首 `max(3 秒, 2%)` 拒绝，防止试听片段冒充整首。不使用 `-xerror`：实测有 QQ 源 FLAC 自带个别坏帧，整首仍可播放。
 - 公开样例：免费 `004Ti8rT003TaZ`（来自 yt-dlp 测试）；会员歌实测需本人登录，不能用模拟代替。
 
+## 窗口版（v0.9.0 预览版）
+
+双击 `猛人下载器.exe` → GuiLauncher 隐藏启动 `node.exe source/gui-server.mjs` 并等它输出 `ready` → 服务监听 127.0.0.1（优先固定端口 47380–47384，便于 Edge 记住通知权限），每次生成不同的口令，写 `%LOCALAPPDATA%\MengrenDownloader\Gui\instance.json`，用单独的 Edge 配置目录 `AppWindow` 以 `--app` 打开窗口。再次双击只给已运行的服务开新窗口。窗口最上面的标题栏由 Windows/Edge 绘制，页面无法改它的高度和字号。
+
+- 安全：只认 Host 为 `127.0.0.1:端口` 的请求；页面首次带口令访问后换成 HttpOnly + SameSite=Strict 的 Cookie；所有 `/api` 需口令；POST 还需本页 Origin 且为 JSON（其他网页无法驱动它）；静态文件只有 ui 三个文件和图标。日志把网址替换为 `[地址]`。
+- 下载：普通视频调用 `download.ps1 -Url -Quality -OutputDirectory`（保留原有 X/B 站浏览器备用路径）；QQ 音乐先 `qqmusic.mjs --list` 列音质，再 `--format` 下载；喜马拉雅先 `ximalaya.mjs --list 文件` 读目录并存入 `Gui\lists`，再 `--tracks-file 文件 --select 范围` 下载，不重复翻目录。子进程带 `MENGREN_GUI=1`：结构化结果以 `@@mengren {json}` 输出，取消是向标准输入写 `cancel`（等同 Ctrl+C）；download.ps1 取消时结束进程树，临时目录按原规则清理。一次只运行一个任务。
+- 抓取：`capture.mjs` 在窗口模式下不再问“开启”（窗口里显示同样的影响说明，要求勾选后点按钮），候选列表以事件推送，改名/序号/下载/清空以 JSON 指令传入，校验规则与命令行相同；关闭时发 `cancel` 走原恢复流程，异常时 CaptureHelper 守护进程恢复。开发测试不要真的开启抓取（会改系统代理、信任证书）。
+- 数据与清理：`Gui\settings.json`、`Gui\history.json`（最多 300 条）、`Gui\logs\gui.log`（2MB × 4）、`Gui\lists`（启动和退出时清空）、`Updates`（启动时删除旧版本包和无关文件，较新版本未下完的 `.part` 留着续传）、`AppWindow` 缓存（启动时清理）。每次启动和退出都清理保存目录及近期记录目录中进程已退出的 `.mengren-XXXXXX`。设置页显示占用并可一键清理；专用 Edge 开着时不清它的缓存，从不删 `BrowserProfile` 本身。
+- 退出：页面断开 8 秒后服务停止队列和抓取、清理并退出；有任务时关窗口先由浏览器确认。启动 90 秒内窗口没连上也会退出。
+- 自动更新：启动 4 秒后（之后每 6 小时）查 `api.github.com/repos/longpeng1413/mengren-downloader/releases`；预览版也接收更新的预览版，正式版只接收正式版。只接受带 `mengren-downloader-版本-windows-x64-full.zip` 和 `SHA256SUMS-full.txt` 的发布，跳转只允许 GitHub 自己的域名，经系统 HTTP 代理（失败再直连）下载，大小或 SHA-256 不符即丢弃，中断的 `.part` 下次续传。安装：服务退出后，由复制到 `Updates` 的 `apply-update.ps1` 等软件目录下的进程都结束，解压到 `staging`，检查关键文件，只新增/覆盖文件（不删除用户文件），结果写 `Updates\result.json` 供下次启动提示。git 仓库目录（有 `.git`）和不可写目录只提示不安装。所以每次发布必须上传 full ZIP 和 `SHA256SUMS-full.txt`，文件名保持这个格式。
+- 测试：`tests/gui.test.mjs` 用 `MENGREN_GUI_HOME`（数据放临时目录）和 `MENGREN_GUI_NO_WINDOW=1`（不开窗口、不查更新）启动真实服务，检查口令/来源拦截；其余为纯函数和抓取指令测试。
+
 ## 7. Git 同步与发布
 
 新电脑应在同一个仓库中开发，不另建 Fork。开始前 `git status` / `git remote -v`；工作区干净且分支明确时可 `git pull --ff-only`。有未提交修改或分叉时先保留并解决，不强制覆盖。
@@ -205,7 +223,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 发布新版本前：
 
 1. 核实授权范围，完成构建和验证；维护 `docs/PROJECT_STATUS.md`。
-2. 同步 `Launcher.cs` 的 AssemblyVersion/FileVersion/标题，`download.ps1` 的显示版本，`bootstrap.ps1` 的 UserAgent，`scripts/build.ps1` 的产物名、README/使用说明版本。依赖版本只在确需升级时调整。
+2. 同步 `Launcher.cs` 与 `GuiLauncher.cs` 的 AssemblyVersion/FileVersion/标题，`source/version.mjs`（版本号；正式版把 preview 改为 false），`download.ps1` 的显示版本，`bootstrap.ps1` 的 UserAgent，`scripts/build.ps1` 的产物名、README/使用说明版本。依赖版本只在确需升级时调整。
 3. 提交源码，推送已授权的分支，等待 Windows Actions 成功；若需 PR，明确最终范围。
 4. 以新 tag 发布新 Release；使用 notes 文件，上传公开 ZIP 和对应 SHA256SUMS。不覆盖旧 tag/文件；完整测试包可包含已校验的官方组件，不得上传本机私人配置/登录状态。
 5. 核对 GitHub Release 是否公开、是否正确标为稳定/预发布、资产名/大小/摘要和源码提交关系。

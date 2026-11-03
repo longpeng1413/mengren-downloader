@@ -6,7 +6,7 @@ import readline from 'node:readline';
 import {safeHttps,hostIn,allowedMedia} from './sites.mjs';
 import {ensureBrowser,sleep} from './browser.mjs';
 import {guardedGet} from './relay.mjs';
-import {run,isCancelled,removeAbandonedJobs,saveCompleted,safeStem,cleanup,ownerFile} from './site-download.mjs';
+import {run,isCancelled,removeAbandonedJobs,saveCompleted,safeStem,cleanup,ownerFile,guiEvent} from './site-download.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const say=text=>console.log(String(text).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]'));
 const api='https://u.y.qq.com/cgi-bin/musicu.fcg',agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
@@ -141,7 +141,7 @@ async function browserFormats(track,{timeout}) {
       let answer;try{answer=await browser.evaluate(page.sessionId,qqBrowserExpression(vkeyPayload(track.mid,track.media)));}catch{continue;}
       if(answer?.state!=='ready') continue;
       if(!answer.loggedIn) {
-        if(!notified){say('请在下载专用 Edge 的 QQ 音乐网页右上角点“登录”，用 QQ 或微信扫码登录；登录后自动继续。不想登录可按 Ctrl+C 中止，再选“普通音质”。');notified=true;}
+        if(!notified){say('请在下载专用 Edge 的 QQ 音乐网页右上角点“登录”，用 QQ 或微信扫码登录；登录后自动继续。'+(process.env.MENGREN_GUI==='1'?'不想登录可以点“取消”，改用“不登录快速读取”。':'不想登录可按 Ctrl+C 中止，再选“普通音质”。'));notified=true;}
         continue;
       }
       const list=playableFormats(answer.data,track.mid,track.media);
@@ -207,7 +207,13 @@ export async function checkAudio(file,expected) {
   if(expected>0&&seconds<expected-Math.max(3,expected*0.02)) throw new Error(`只取得 ${Math.round(seconds)} 秒的片段（整首约 ${expected} 秒），不作为完整歌曲保存`);
   return seconds;
 }
-export async function downloadQQ(address,output,{quality='best',probe=false,timeout=600000,format=null,ask=askLine}={}) {
+// What the window version shows before the user picks a quality; no play addresses.
+export function qqListing(track,choices) {
+  return {type:'qq',title:track.title,singers:track.singers,album:track.album,seconds:track.seconds,
+    formats:choices.map(c=>({prefix:c.prefix,label:c.label,ext:c.ext,note:c.note,size:Number(track.sizes[c.prefix])||0})),
+    default:choices[defaultFormat(choices)]?.prefix||null};
+}
+export async function downloadQQ(address,output,{quality='best',probe=false,list=false,timeout=600000,format=null,ask=askLine}={}) {
   let song=qqSong(address);
   if(!song) throw new Error('请粘贴 QQ 音乐单曲链接（网页歌曲页或 App 分享链接）');
   if(song.short) song=await followShort(song.short);
@@ -224,6 +230,7 @@ export async function downloadQQ(address,output,{quality='best',probe=false,time
     say('将打开下载专用 Edge 读取 QQ 音乐；首次使用请在网页上正常登录，之后会复用登录直到过期。');
     choices=await browserFormats(track,{timeout});
   }
+  if(list) {guiEvent(qqListing(track,choices));return {title:track.title};}
   if(probe) {say('可下载音质：'+choices.map(c=>c.label).join('、'));say('歌曲来源验证成功。');return {title:track.title,formats:choices.map(c=>c.label)};}
   let choice;
   if(format) {choice=choices.find(c=>c.prefix===format);if(!choice) throw new Error('这首歌没有所选音质，可下载：'+choices.map(c=>c.label).join('、'));}
@@ -260,6 +267,6 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const args=process.argv.slice(2),value=name=>args[args.indexOf(name)+1];
   try {
     if(!args.includes('--url')||!args.includes('--output')||!value('--url')||!value('--output')) throw new Error('缺少链接或保存目录');
-    await downloadQQ(value('--url'),value('--output'),{probe:args.includes('--probe'),quality:args.includes('--quality')&&value('--quality')==='standard'?'standard':'best',format:args.includes('--format')?value('--format'):null});
+    await downloadQQ(value('--url'),value('--output'),{probe:args.includes('--probe'),list:args.includes('--list'),quality:args.includes('--quality')&&value('--quality')==='standard'?'standard':'best',format:args.includes('--format')?value('--format'):null});
   } catch(error) {say('未下载成功：'+(error?.message||'请重新读取链接'));process.exitCode=isCancelled()?130:1;}
 }

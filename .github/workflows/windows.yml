@@ -16,12 +16,12 @@ jobs:
       - name: Verify official components and entry point
         shell: pwsh
         run: |
-          & './猛人下载器.exe' --check
+          & './猛人下载器-命令行版.exe' --check
           if ($LASTEXITCODE -ne 0) { throw 'Component verification failed' }
       - name: Site integration regression tests
         shell: pwsh
         run: |
-          & ./node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs tests/capture-menu.test.mjs
+          & ./node.exe --test tests/sites.test.mjs tests/session.test.mjs tests/capture.test.mjs tests/capture-menu.test.mjs tests/gui.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Site tests failed' }
       - name: Build complete test package
         shell: powershell

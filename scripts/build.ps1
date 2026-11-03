@@ -4,9 +4,12 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw '缺少 Windows .NET Framework 编译器。' }
-$compilerArgs = @('/nologo','/target:exe','/platform:x64','/optimize+',('/win32icon:' + (Join-Path $root 'assets\app.ico')),('/out:' + (Join-Path $root '猛人下载器.exe')),(Join-Path $root 'source\Launcher.cs'))
+$compilerArgs = @('/nologo','/target:winexe','/platform:x64','/optimize+','/r:System.Windows.Forms.dll',('/win32icon:' + (Join-Path $root 'assets\app.ico')),('/out:' + (Join-Path $root '猛人下载器.exe')),(Join-Path $root 'source\GuiLauncher.cs'))
 & $compiler @compilerArgs
-if ($LASTEXITCODE -ne 0) { throw '入口构建失败。' }
+if ($LASTEXITCODE -ne 0) { throw '界面入口构建失败。' }
+$cliArgs = @('/nologo','/target:exe','/platform:x64','/optimize+',('/win32icon:' + (Join-Path $root 'assets\app.ico')),('/out:' + (Join-Path $root '猛人下载器-命令行版.exe')),(Join-Path $root 'source\Launcher.cs'))
+& $compiler @cliArgs
+if ($LASTEXITCODE -ne 0) { throw '命令行入口构建失败。' }
 $helperArgs = @('/nologo','/target:exe','/platform:x64','/optimize+','/r:System.Web.Extensions.dll',('/out:' + (Join-Path $root 'CaptureHelper.exe')),(Join-Path $root 'source\CaptureHelper.cs'))
 & $compiler @helperArgs
 if ($LASTEXITCODE -ne 0) { throw '抓取辅助模块构建失败，需要 .NET Framework 4.8。' }
@@ -15,10 +18,10 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
-$zipName = 'mengren-downloader-0.8.0-windows-x64.zip'
-if ($FullPackage) { $zipName = 'mengren-downloader-0.8.0-windows-x64-full.zip' }
+$zipName = 'mengren-downloader-0.9.0-windows-x64.zip'
+if ($FullPackage) { $zipName = 'mengren-downloader-0.9.0-windows-x64-full.zip' }
 $zipPath = Join-Path $dist $zipName
-$files = @('猛人下载器.exe','CaptureHelper.exe','恢复网络.cmd','抓取使用说明.txt','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE','AGENTS.md','准备开发环境.cmd')
+$files = @('猛人下载器.exe','猛人下载器-命令行版.exe','CaptureHelper.exe','恢复网络.cmd','抓取使用说明.txt','download.ps1','bootstrap.ps1','dependencies.json','create-shortcut.ps1','创建桌面快捷方式.cmd','检查软件.cmd','使用说明.txt','组件说明.txt','README.md','LICENSE','AGENTS.md','准备开发环境.cmd')
 if ($FullPackage) {
     . (Join-Path $root 'bootstrap.ps1')
     $bundleManifest = Get-Content -LiteralPath (Join-Path $root 'dependencies.json') -Raw -Encoding UTF8 | ConvertFrom-Json

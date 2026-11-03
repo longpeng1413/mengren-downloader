@@ -11,6 +11,25 @@ const message=text=>console.log(String(text).replace(/https?:\/\/[^\s"<>]+/g,'[å
 let child,cancelled=false;
 process.on('SIGINT',()=>{cancelled=true;child?.kill('SIGINT');process.exitCode=130;});
 export const isCancelled=()=>cancelled;
+// The window version (gui-server.mjs) runs these scripts without a console: it reads
+// "@@mengren {json}" lines for structured results and sends a "cancel" line instead of Ctrl+C.
+export const guiMode=process.env.MENGREN_GUI==='1';
+export const guiEvent=value=>console.log('@@mengren '+JSON.stringify(value));
+export const guiCommands=[];
+if(guiMode) {
+  let pending='';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data',text=>{
+    const lines=(pending+text).split(/\r?\n/);pending=lines.pop();
+    for(const line of lines.map(l=>l.trim()).filter(Boolean)) {
+      if(line==='cancel') process.emit('SIGINT');
+      else {try{guiCommands.push(JSON.parse(line));}catch{}}
+    }
+  });
+  process.stdin.on('error',()=>{});
+  // Listening must not keep a finished download alive.
+  process.stdin.unref?.();
+}
 export async function run(executable,args,{quiet=false}={}) {
   return new Promise((resolve,reject)=>{
     let text='',pending='',nextProgress=0;

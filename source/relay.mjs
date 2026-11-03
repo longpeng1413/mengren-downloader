@@ -47,7 +47,7 @@ export function systemProxy() {
   return cachedProxy=parseProxySetting(enabled,server,process.env.HTTPS_PROXY||process.env.https_proxy||process.env.HTTP_PROXY||process.env.http_proxy||'');
 }
 // TLS through an HTTP CONNECT tunnel; the certificate of the real site is still verified.
-function proxiedConnection(proxy,host,port) {
+export function proxiedConnection(proxy,host,port) {
   return (options,created)=>{
     const tunnel=http.request({host:proxy.host,port:proxy.port,method:'CONNECT',path:`${host}:${port}`,headers:{Host:`${host}:${port}`},timeout:30000,agent:false});
     tunnel.on('timeout',()=>tunnel.destroy(new Error('代理连接超时')));

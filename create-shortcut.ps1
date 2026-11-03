@@ -13,7 +13,7 @@ try {
     $shortcut = $shell.CreateShortcut($link)
     $shortcut.TargetPath = $launcher
     $shortcut.WorkingDirectory = $PSScriptRoot
-    $shortcut.Description = '猛人下载器：粘贴链接、选择画质、下载到系统下载文件夹'
+    $shortcut.Description = '猛人下载器：粘贴链接、选择画质、下载视频和音频'
     $shortcut.IconLocation = $launcher + ',0'
     $shortcut.WindowStyle = 1
     $shortcut.Save()

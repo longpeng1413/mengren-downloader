@@ -91,7 +91,7 @@ export async function resolveX(address,{quality='best',timeout=600000,notify=()=
       if(view?.state==='out') {
         if(!notified){
           notify('这条帖子需要登录 X 才能看。请在弹出的下载专用 Edge 里用 X 账号和密码登录（只需第一次），登录后软件自动继续。');
-          notify('想用 Google 登录的话：Google 不允许在被软件控制的浏览器里登录，请先按 Ctrl+C 中止，输入 登录X 回车，按提示登录后再粘贴这条链接。');
+          notify(process.env.MENGREN_GUI==='1'?'想用 Google 登录的话：Google 不允许在被软件控制的浏览器里登录，请先取消这个下载，到“登录管理”页点“用 Google 登录”，登录好后再下载这条链接。':'想用 Google 登录的话：Google 不允许在被软件控制的浏览器里登录，请先按 Ctrl+C 中止，输入 登录X 回车，按提示登录后再粘贴这条链接。');
           notified=true;
         }
         waitedForLogin=true;continue;

@@ -1,11 +1,11 @@
-import {mkdir,mkdtemp,writeFile,stat} from 'node:fs/promises';
+import {mkdir,mkdtemp,writeFile,readFile,stat} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import readline from 'node:readline';
 import {safeHttps,hostIn,allowedMedia} from './sites.mjs';
 import {ensureBrowser,sleep} from './browser.mjs';
 import {browserAgent} from './relay.mjs';
-import {run,isCancelled,removeAbandonedJobs,saveCompleted,safeStem,cleanup,ownerFile} from './site-download.mjs';
+import {run,isCancelled,removeAbandonedJobs,saveCompleted,safeStem,cleanup,ownerFile,guiEvent} from './site-download.mjs';
 import {fetchAudio,checkAudio} from './qqmusic.mjs';
 
 // Ximalaya albums. The track list needs a login and a page token only the site's
@@ -235,13 +235,26 @@ async function saveEpisode(track,address,albumDir,album,width) {
   } finally {await cleanup(job,albumDir);}
 }
 
-export async function downloadXimalaya(address,output,{probe=false,select=null,ask=askLine,timeout=600000}={}) {
-  let target=xmlyTarget(address);
-  if(!target) throw new Error('请粘贴喜马拉雅专辑链接、单集链接或 App 分享链接');
-  if(target.short) target=await followShort(target.short);
-  let page=null,album;
+// The window version reads the album once (--list) and downloads from that saved list
+// (--tracks-file), so choosing episodes never pages through the album a second time.
+export function readListing(text) {
+  const data=JSON.parse(text);
+  const tracks=(Array.isArray(data?.tracks)?data.tracks:[]).filter(t=>/^\d{1,12}$/.test(String(t?.trackId)))
+    .map(t=>({index:Number.isInteger(t.index)?t.index:0,trackId:String(t.trackId),title:String(t.title||'').slice(0,300),duration:Number(t.duration)||0,isPaid:Boolean(t.isPaid),anchor:String(t.anchor||'').slice(0,100)}));
+  if(!tracks.length) throw new Error('保存的专辑目录已失效，请重新识别链接');
+  return {title:String(data.title||'喜马拉雅专辑').slice(0,300),total:Number(data.total)||tracks.length,tracks,single:Boolean(data.single)};
+}
+export async function downloadXimalaya(address,output,{probe=false,select=null,ask=askLine,timeout=600000,list=null,tracksFile=null}={}) {
+  let target=null,page=null,album=null;
+  if(tracksFile) album=readListing(await readFile(tracksFile,'utf8'));
+  else {
+    target=xmlyTarget(address);
+    if(!target) throw new Error('请粘贴喜马拉雅专辑链接、单集链接或 App 分享链接');
+    if(target.short) target=await followShort(target.short);
+  }
   try {
-    if(target.album) {
+    if(album) say('使用识别时读取的专辑目录。');
+    else if(target.album) {
       say('正在打开下载专用 Edge 读取专辑目录……');
       // A browser step that does not answer (seen while the site was throttling us) gets
       // one fresh tab before giving up.
@@ -255,7 +268,7 @@ export async function downloadXimalaya(address,output,{probe=false,select=null,a
       }
     } else {
       const info=await publicTrackInfo(target.track);
-      album={title:String(info.album_title||'喜马拉雅单集'),total:1,tracks:[{index:0,trackId:target.track,title:String(info.title||'音频').trim(),duration:Number(info.duration)||0,isPaid:Boolean(info.is_paid),anchor:String(info.nickname||'').trim()}]};
+      album={title:String(info.album_title||'喜马拉雅单集'),total:1,single:true,tracks:[{index:0,trackId:target.track,title:String(info.title||'音频').trim(),duration:Number(info.duration)||0,isPaid:Boolean(info.is_paid),anchor:String(info.nickname||'').trim()}]};
     }
     const tracks=album.tracks,paid=tracks.filter(t=>t.isPaid).length;
     say(`已识别：${album.title}`);
@@ -263,14 +276,19 @@ export async function downloadXimalaya(address,output,{probe=false,select=null,a
     if(!tracks.length) throw new Error('专辑里没有可下载的音频');
     if(probe) return {title:album.title,total:album.total,tracks:tracks.length,paid};
     const albumDir=join(resolve(output),albumFolderName(album.title));
-    await mkdir(albumDir,{recursive:true});
-    if(await removeAbandonedJobs(albumDir)) say('已清理上次中断留下的临时文件。');
     const width=Math.max(3,String(Math.max(...tracks.map(t=>t.index))).length);
     const already=new Set();
     for(const track of tracks) for(const ext of ['m4a','mp3','aac']) if(await exists(join(albumDir,episodeFileName(track,width,ext)))) already.add(track.trackId);
+    if(list) {
+      await writeFile(list,JSON.stringify(album));
+      guiEvent({type:'xmly',title:album.title,total:album.total,single:Boolean(album.single),folder:albumDir,tracks:tracks.map(t=>({index:t.index,title:t.title,duration:t.duration,isPaid:t.isPaid,have:already.has(t.trackId)}))});
+      return {title:album.title};
+    }
+    await mkdir(albumDir,{recursive:true});
+    if(await removeAbandonedJobs(albumDir)) say('已清理上次中断留下的临时文件。');
     say(`保存位置：${albumDir}`+(already.size?`（其中 ${already.size} 集以前已经下载过，会自动跳过）`:''));
     let chosen=tracks;
-    if(target.album) {
+    if(!album.single) {
       const indexes=tracks.map(t=>t.index);
       for(;;) {
         const answer=select??await ask(`请选择要下载的集数（直接回车或输入 全部 = ${tracks.length} 集；例如 1-50、100-、3,5,8）: `);
@@ -313,6 +331,6 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   const args=process.argv.slice(2),value=name=>args[args.indexOf(name)+1];
   try {
     if(!args.includes('--url')||!args.includes('--output')||!value('--url')||!value('--output')) throw new Error('缺少链接或保存目录');
-    await downloadXimalaya(value('--url'),value('--output'),{probe:args.includes('--probe'),select:args.includes('--select')?value('--select'):null});
+    await downloadXimalaya(value('--url'),value('--output'),{probe:args.includes('--probe'),select:args.includes('--select')?value('--select'):null,list:args.includes('--list')?value('--list'):null,tracksFile:args.includes('--tracks-file')?value('--tracks-file'):null});
   } catch(error) {say('未下载成功：'+(error?.message||'请重新读取链接'));process.exitCode=isCancelled()?130:1;}
 }

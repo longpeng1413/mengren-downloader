@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>猛人下载器</title>
+<link rel="icon" href="app.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><img src="app.png" alt=""><span>猛人下载器</span><em class="version"></em></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-page="download" role="tab">下载</button>
+    <button class="tab" data-page="capture" role="tab">抓取</button>
+    <button class="tab" data-page="logins" role="tab">登录管理</button>
+    <button class="tab" data-page="settings" role="tab">设置</button>
+  </nav>
+</header>
+
+<div id="update" class="banner" hidden>
+  <span id="update-text"></span>
+  <span id="update-actions" class="banner-actions"></span>
+  <button class="icon" data-action="close-banner" aria-label="关闭">×</button>
+</div>
+
+<main>
+  <!-- 下载 -->
+  <section class="page active" id="page-download">
+    <div class="card input-card">
+      <label for="link" class="label">粘贴链接或分享文字</label>
+      <div class="input-row">
+        <input id="link" type="text" placeholder="支持 YouTube、B 站、抖音、视频号、小鹅通、X、QQ 音乐、喜马拉雅……" autocomplete="off">
+        <button id="recognize" class="primary">识别</button>
+      </div>
+      <p id="clip-hint" class="hint" hidden>已自动填入你刚复制的链接，确认后点“识别”。</p>
+      <p class="muted save-line">保存到：<span id="save-hint"></span> <button class="link" data-action="pick-folder">更改</button></p>
+    </div>
+
+    <div id="result" class="card result" hidden></div>
+
+    <div class="card">
+      <div class="card-head"><h2>下载队列</h2><span id="queue-count" class="muted"></span></div>
+      <ul id="queue" class="list"></ul>
+      <p id="queue-empty" class="empty">还没有要下载的内容。粘贴链接、点“识别”，再点“加入下载”。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>已完成</h2>
+        <div class="head-actions"><button class="ghost" data-action="open-downloads">打开下载文件夹</button><button class="ghost" data-action="clear-history">清空记录</button></div>
+      </div>
+      <ul id="done" class="list"></ul>
+      <p id="done-empty" class="empty">下载完成的会显示在这里（最多保留最近 300 条记录）。</p>
+    </div>
+  </section>
+
+  <!-- 抓取 -->
+  <section class="page" id="page-capture">
+    <div id="capture-off" class="card">
+      <h2>播放抓取</h2>
+      <p>用于下载<b>微信小程序、网页里正在播放、但没有分享链接</b>的课程视频。开启后，你去播放视频，软件会把视频认出来列在下面，再勾选下载。</p>
+      <div class="notice">
+        <p><b>开启前请了解：</b></p>
+        <ul>
+          <li>软件会<b>临时修改</b>当前用户的系统代理，并<b>信任一张只在本机生成的证书</b>，用来认出视频地址。</li>
+          <li>只认视频和课程名称，不记录网页内容、账号和密码；微信登录、聊天、支付只原样转发加密连接。</li>
+          <li>关闭抓取或退出软件时，会<b>自动恢复</b>原来的网络设置并移除证书信任。</li>
+          <li>万一异常退出导致上不了网，可以运行软件文件夹里的“恢复网络.cmd”。</li>
+        </ul>
+      </div>
+      <div id="capture-error" class="alert danger" hidden></div>
+      <label class="check"><input type="checkbox" id="capture-agree"> 我已了解以上影响</label>
+      <div class="actions"><button id="capture-on" class="primary" disabled>开启抓取</button></div>
+    </div>
+
+    <div id="capture-running" class="card" hidden>
+      <div class="card-head"><h2 id="capture-title">正在抓取 <span class="dot"></span></h2><button class="danger" id="capture-stop">关闭抓取并恢复网络</button></div>
+      <p class="muted">现在去微信或网页里播放课程视频，播放后它会出现在下面。可以一节一节打开多节课程，最后一起下载。序号和名称可以直接改，文件会按“序号. 名称.mp4”保存。</p>
+      <p id="capture-note" class="muted" hidden></p>
+      <table class="table">
+        <thead><tr><th><input type="checkbox" id="cap-all" aria-label="全选"></th><th>序号</th><th>课程名称</th><th>类型</th><th>大小</th><th>状态</th></tr></thead>
+        <tbody id="cap-list"></tbody>
+      </table>
+      <div class="actions"><span id="cap-selected" class="muted"></span><button class="ghost" id="cap-clear">清空列表</button><button class="primary" id="cap-download">下载选中的视频</button></div>
+    </div>
+  </section>
+
+  <!-- 登录管理 -->
+  <section class="page" id="page-logins">
+    <div class="card">
+      <h2>登录管理</h2>
+      <p class="muted">需要登录的网站，在“下载专用浏览器”（一个单独的 Edge 窗口）里登录一次，以后会记住，直到网站让登录过期。登录状态以网页上显示的为准。软件<b>不读取、不导出</b>你的密码和登录信息。</p>
+      <ul id="login-list" class="logins"></ul>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="page" id="page-settings">
+    <div class="card">
+      <h2>常用设置</h2>
+      <div class="row"><div><b>保存位置</b><p class="muted" id="save-path"></p></div><div class="btns"><button class="ghost" data-action="default-folder">恢复默认</button><button class="ghost" data-action="pick-folder">更改</button></div></div>
+      <div class="row"><div><b>默认画质</b><p class="muted">YouTube、B 站、X 识别后默认选中的画质</p></div>
+        <select id="quality"><option value="best">最高画质</option><option value="1080">1080P 及以下</option><option value="720">720P 及以下</option><option value="480">480P 及以下</option></select></div>
+      <div class="row"><div><b>外观</b><p class="muted">跟随系统时，电脑是深色模式就自动变深色</p></div>
+        <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+      <div class="row"><div><b>大字模式</b><p class="muted">字和按钮都放大，看得更清楚</p></div><label class="switch"><input type="checkbox" id="big"><span></span></label></div>
+      <div class="row"><div><b>自动识别剪贴板</b><p class="muted">切回软件时，如果刚复制了支持的链接，自动填进输入框（不会自动下载）</p></div><label class="switch"><input type="checkbox" id="clipboard"><span></span></label></div>
+      <div class="row"><div><b>完成提醒</b><p class="muted">软件不在最前面时，每下完一项在电脑右下角弹一条通知（不响铃）</p></div><label class="switch"><input type="checkbox" id="notify"><span></span></label></div>
+      <div class="row"><div><b>检查新版本</b><p class="muted">启动时看看 GitHub 上有没有新版本</p></div><label class="switch"><input type="checkbox" id="checkUpdates"><span></span></label></div>
+      <div class="row"><div><b>自动更新</b><p class="muted" id="auto-update-note">发现新版本就在后台下载并核对，关闭软件时自动安装；下次打开就是新版本</p></div><label class="switch"><input type="checkbox" id="autoUpdate"><span></span></label></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>存储与清理</h2><button class="ghost" data-action="clean-all">一键清理</button></div>
+      <p class="muted">只清理软件自己产生的临时文件和缓存，<b>不会删除你下载的视频和音频</b>，也不会退出你在专用浏览器里的登录。每次启动软件也会自动清理中断留下的临时文件。</p>
+      <ul id="storage" class="storage"></ul>
+    </div>
+
+    <div class="card">
+      <h2>关于</h2>
+      <div class="row"><div><b>猛人下载器 <span class="version"></span></b><p class="muted" id="update-status">源码与更新：github.com/longpeng1413/mengren-downloader</p></div><div class="btns"><button class="ghost" data-action="check-update">检查更新</button><button class="ghost" data-action="open-release">打开发布页</button></div></div>
+      <div class="row"><div><b>命令行版</b><p class="muted">原来的黑窗口版本，界面出问题时可以用它，也方便排查问题</p></div><button class="ghost" data-action="open-cli">打开命令行版</button></div>
+    </div>
+  </section>
+</main>
+
+<div id="dialog" class="dialog" hidden>
+  <div class="dialog-box" role="dialog" aria-modal="true">
+    <h3 id="dialog-title"></h3>
+    <p id="dialog-text"></p>
+    <div class="actions"><button class="ghost" id="dialog-cancel">取消</button><button class="primary" id="dialog-ok">确定</button></div>
+  </div>
+</div>
+<div id="lost" class="dialog" hidden>
+  <div class="dialog-box">
+    <h3 id="lost-title">软件后台已经关闭</h3>
+    <p id="lost-text">请关闭这个窗口，再重新打开猛人下载器。</p>
+  </div>
+</div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

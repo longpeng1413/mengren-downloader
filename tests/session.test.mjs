@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 async function session(inputs,args=[]) {
   const folder=await mkdtemp(join(tmpdir(),'mengren-session-')),exe=join(folder,'launcher.exe'),worker=join(folder,'download.ps1');
-  await copyFile(resolve('猛人下载器.exe'),exe);
+  await copyFile(resolve('猛人下载器-命令行版.exe'),exe);
   await writeFile(worker,'\uFEFF'+[
     'param([switch]$Check,[switch]$Session)',
     '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
@@ -51,7 +51,7 @@ test('Check mode runs once without waiting for a new link',async()=>{
 // Exercise the real worker before initialization, in addition to the isolated launcher cases.
 test('Formal application accepts empty Enter at its actual link prompt',async()=>{
   const result=await new Promise((done,reject)=>{
-    const child=spawn(resolve('猛人下载器.exe'),[],{stdio:['pipe','pipe','pipe'],windowsHide:true});
+    const child=spawn(resolve('猛人下载器-命令行版.exe'),[],{stdio:['pipe','pipe','pipe'],windowsHide:true});
     let text='',sent=false;
     const timer=setTimeout(()=>{child.kill();reject(Error('Actual input prompt timed out'));},20000);
     const receive=buffer=>{text+=buffer.toString('utf8');if(!sent&&text.includes('直接回车退出')){sent=true;child.stdin.end('\n');}};
@@ -64,7 +64,7 @@ test('Formal application accepts empty Enter at its actual link prompt',async()=
 
 test('Declining capture returns to link input without activating system settings',async()=>{
   const result=await new Promise((done,reject)=>{
-    const child=spawn(resolve('猛人下载器.exe'),[],{stdio:['pipe','pipe','pipe'],windowsHide:true});
+    const child=spawn(resolve('猛人下载器-命令行版.exe'),[],{stdio:['pipe','pipe','pipe'],windowsHide:true});
     let text='',sent=0,declined=false;
     const timer=setTimeout(()=>{child.kill();reject(Error('Capture consent entry timed out'));},30000);
     const receive=buffer=>{text+=buffer.toString('utf8');const count=(text.match(/直接回车退出/g)||[]).length;while(sent<count)child.stdin.write((sent++===0?'抓取':'')+'\n');if(!declined&&text.includes('其他输入返回')){declined=true;child.stdin.write('返回\n');}};
@@ -91,7 +91,7 @@ test('A mistyped quality asks again instead of discarding the pasted link',async
 
 test('Ctrl+C stops only the running task; the window stays for the next link',async()=>{
   const folder=await mkdtemp(join(tmpdir(),'mengren-ctrlc-')),exe=join(folder,'launcher.exe'),worker=join(folder,'download.ps1'),output=join(folder,'result.json');
-  await copyFile(resolve('猛人下载器.exe'),exe);
+  await copyFile(resolve('猛人下载器-命令行版.exe'),exe);
   await writeFile(worker,'﻿'+[
     'param([switch]$Check,[switch]$Session)',
     '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
