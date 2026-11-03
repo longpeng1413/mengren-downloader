@@ -5,7 +5,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {extractLink,classify,parseLine,compressSelection,addHistory} from '../source/gui-core.mjs';
-import {pickRelease,expectedHash,compareVersions,githubHost} from '../source/updater.mjs';
+import {pickRelease,expectedHash,compareVersions,githubHost,connectionFor} from '../source/updater.mjs';
 import {runCaptureGui,manualTitle} from '../source/capture-menu.mjs';
 import {readListing} from '../source/ximalaya.mjs';
 import {qqListing} from '../source/qqmusic.mjs';
@@ -71,6 +71,10 @@ test('Updates pick the newest release with the full package, previews only for p
   const hash='a'.repeat(64);
   assert.equal(expectedHash(`${hash}  mengren-downloader-1.0.0-windows-x64-full.zip\n`,'mengren-downloader-1.0.0-windows-x64-full.zip'),hash);
   assert.equal(expectedHash(`${hash}  other.zip\n`,'mengren-downloader-1.0.0-windows-x64-full.zip'),null);
+  // Through the proxy the request must still say Host: github.com, not github.com:80.
+  const proxied=connectionFor(new URL('https://github.com/a/b'),{host:'127.0.0.1',port:7897});
+  assert.equal(proxied.defaultPort,443);assert.equal(typeof proxied.createConnection,'function');
+  assert.deepEqual(connectionFor(new URL('https://github.com/a/b'),null),{});
   assert.ok(githubHost('objects.githubusercontent.com'));assert.ok(!githubHost('github.com.evil.example'));assert.ok(!githubHost('evilgithub.com'));
 });
 
