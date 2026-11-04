@@ -270,10 +270,11 @@ function startCapture() {
     else if(e?.type==='capture-start') capture.current={id:e.id,progress:null,speed:null};
     else if(e?.type==='capture-done') {
       capture.current=null;
-      addHistory(history,{id:randomUUID(),time:Date.now(),kind:'capture',site:'抓取',title:e.title||'抓取的视频',ok:Boolean(e.ok),info:e.audioOnly?'播放抓取 · 这节只有声音，已存为 m4a 音频':'播放抓取',reason:e.ok?null:e.reason,files:e.file?[e.file]:[],folder:e.file?dirname(e.file):settings.saveDir});
+      addHistory(history,{id:randomUUID(),time:Date.now(),kind:'capture',site:'抓取',title:e.title||'抓取的视频',ok:Boolean(e.ok),info:e.audioOnly?'播放抓取 · 文件里只有声音，已存为 m4a 音频（原课程若有画面，说明画面被加密或单独传输）':'播放抓取',reason:e.ok?null:e.reason,files:e.file?[e.file]:[],folder:e.file?dirname(e.file):settings.saveDir});
       historyChanged();broadcast({type:'done',ok:Boolean(e.ok),title:e.title,reason:e.reason});
     }
     else if(e?.type==='notice') toast(e.text);
+    else if(e?.type==='capture-note') {capture.note=e.text;toast(e.text);}
     else if(p.progress&&capture.current) Object.assign(capture.current,{progress:p.progress.percent,speed:p.progress.speed});
     else if(p.note) capture.note=p.note;
     captureChanged();

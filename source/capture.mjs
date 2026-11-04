@@ -29,6 +29,8 @@ async function main(output){
   const ask=q=>inputClosed?Promise.resolve(''):new Promise(done=>{let settled=false;const finish=value=>{if(settled)return;settled=true;rl.removeListener('close',closed);done(value);};const closed=()=>finish('');rl.once('close',closed);rl.question(q,finish);});
   let proxy,lock,activated=false,quitting=false,lastWarning=0,pendingChange=null;
   // New candidates arrive in bursts; send the window one list update per half second.
+  let skipNoticeAt=0;
+  const skipped=()=>{if(Date.now()<skipNoticeAt)return;skipNoticeAt=Date.now()+30000;const text='检测到视频号视频：视频号在微信里播放时是加密的，抓取下载不了。请在视频号里点“分享 → 复制链接”，粘贴到下载页（命令行版直接粘贴链接）下载。';guiMode?guiEvent({type:'capture-note',text}):console.log('\n'+text);};
   const changed=()=>{pendingChange??=setTimeout(()=>{pendingChange=null;if(proxy&&!quitting)guiEvent({type:'capture',items:captureSnapshot(proxy.catalog.items)});},500);};
   const diagnostic=code=>{if(/CERT|TLS|SSL/.test(code)&&Date.now()>lastWarning){lastWarning=Date.now()+10000;console.log('网站证书校验未通过，该请求没有放行；若课程不能播放，请退出抓取。错误：'+code);}};
   async function cleanup(){if(quitting)return;quitting=true;rl?.close();if(proxy)await proxy.close();if(activated){try{command('end',process.pid);}catch{console.log('自动恢复未完成，请关闭抓取窗口后运行“恢复网络.cmd”；原设置备份仍保留。');}}if(lock){await lock.close();await unlink(join(data,'capture.lock')).catch(()=>{});}}
@@ -39,7 +41,7 @@ async function main(output){
     try{lock=await open(join(data,'capture.lock'),'wx',0o600);await lock.writeFile(JSON.stringify({pid:process.pid}));}catch{throw Error('已有抓取会话或上次未恢复。请先退出原抓取窗口，再运行“恢复网络.cmd”。');}
     command('init');
     const saved=JSON.parse(command('routing'));
-    proxy=await createCaptureProxy({data,helper,upstream:parseUpstream(saved),onDiagnostic:diagnostic,onMedia:item=>guiMode?changed():console.log('\n发现 '+describeCapture(item)+'；输入 '+item.id+' 下载（也可输入 全部 批量下载）。'),onTitle:item=>guiMode?changed():console.log('\n识别课程名：'+describeCapture(item))});
+    proxy=await createCaptureProxy({data,helper,upstream:parseUpstream(saved),onDiagnostic:diagnostic,onSkip:skipped,onMedia:item=>guiMode?changed():console.log('\n发现 '+describeCapture(item)+'；输入 '+item.id+' 下载（也可输入 全部 批量下载）。'),onTitle:item=>guiMode?changed():console.log('\n识别课程名：'+describeCapture(item))});
     activated=true;command('proxy-on','127.0.0.1:'+proxy.port);
     command('trust');
     const guard=spawn(helper,['guard',data,String(process.pid)],{detached:true,stdio:'ignore',windowsHide:true});await new Promise((done,reject)=>{guard.once('spawn',done);guard.once('error',()=>reject(Error('后台网络恢复进程未能启动，已停止抓取')));});guard.unref();

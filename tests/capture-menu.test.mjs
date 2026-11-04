@@ -10,6 +10,14 @@ const allowed=url=>new URL(url).hostname==='file.justkami.com';
 const response={statusCode:200,headers:{'content-type':'video/mp4'}};
 const media=n=>'https://file.justkami.com/lesson-'+n+'.mp4';
 function catalog(count=3){const c=new CaptureCatalog();for(let n=1;n<=count;n++)c.observe(media(n),response);return c;}
+test('WeChat Channels pieces never fill the capture list; other video.qq.com media still does',()=>{
+ const c=new CaptureCatalog(),partial={statusCode:206,headers:{'content-type':'video/mp4','content-range':'bytes 0-1023/40000000'}};
+ // Playing one Channels video requested 100+ ranges, each with its own query.
+ for(let n=0;n<120;n++)assert.deepEqual(c.observe('https://finder.video.qq.com/251/20302/stodownload?encfilekey=k&token=t'+n+'&idx=1',partial),{skipped:'channels'});
+ assert.equal(c.items.length,0);
+ assert.equal(c.observe('https://apd-vlive.apdcdn.tc.qq.com.video.qq.com/vhot2.qqvideo.tc.qq.com/lesson.mp4',response).kind,'video');
+ assert.equal(c.items.length,1);
+});
 async function menu(c,inputs,download){const prompts=[],logs=[];await runCaptureMenu({catalog:c,ask:async q=>{prompts.push(q);assert.ok(inputs.length,'Unexpected extra prompt');const input=inputs.shift();return typeof input==='function'?await input(q):input;},download,log:s=>logs.push(s)});return {prompts,logs};}
 test('Explicit media associations bind course titles before or after capture, across renewed signatures',()=>{
  const c=catalog(2);

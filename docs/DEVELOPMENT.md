@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 if ($LASTEXITCODE -ne 0) { throw '启动/组件校验失败' }
 ```
 
-输出：根目录 `猛人下载器.exe`（窗口版入口）、`猛人下载器-命令行版.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-0.9.3-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
+输出：根目录 `猛人下载器.exe`（窗口版入口）、`猛人下载器-命令行版.exe`、`CaptureHelper.exe`。`-Package` 为开发用小包；`-Package -FullPackage` 为 `dist/mengren-downloader-1.0.0-windows-x64-full.zip` 和 `SHA256SUMS-full.txt`，包含代码、文档、锁定组件及许可。构建可能因时间戳而得到不同 ZIP 哈希，应校验本次实际产物，不声称二进制可重复构建。
 
 按修改范围验证，避免反复下载大型视频：
 
@@ -202,7 +202,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 - `checkAudio` 完整解码，以最后的 `time=` 为实际时长；短于整首 `max(3 秒, 2%)` 拒绝，防止试听片段冒充整首。不使用 `-xerror`：实测有 QQ 源 FLAC 自带个别坏帧，整首仍可播放。
 - 公开样例：免费 `004Ti8rT003TaZ`（来自 yt-dlp 测试）；会员歌实测需本人登录，不能用模拟代替。
 
-## 窗口版（v0.9.0 预览版）
+## 窗口版（v0.9.0 起，v1.0.0 正式版）
 
 双击 `猛人下载器.exe` → GuiLauncher 隐藏启动 `node.exe source/gui-server.mjs` 并等它输出 `ready` → 服务监听 127.0.0.1（优先固定端口 47380–47384，便于 Edge 记住通知权限），每次生成不同的口令，写 `%LOCALAPPDATA%\MengrenDownloader\Gui\instance.json`，用单独的 Edge 配置目录 `AppWindow` 以 `--app` 打开窗口。再次双击时，若已有窗口连着服务，服务输出 `ready focus`，GuiLauncher 找到标题为“猛人下载器”的 Edge 窗口，恢复并调到最前，不再新开；没有窗口连着时才新开一个。窗口最上面的标题栏由 Windows/Edge 绘制，页面无法改它的高度和字号。
 

@@ -11,6 +11,9 @@ import {gunzipSync,inflateSync,brotliDecompressSync} from 'node:zlib';
 import {courseDomains,courseResponse,extractCourseMetadata,mediaIdentity,responseFileTitle} from './capture-course.mjs';
 export const captureDomains=['justkami.com','xiaoeknow.com','xiaoe-tech.com','xet.tech','xetslk.com','xetlk.com','xiaoecloud.com','douyinvod.com','bilivideo.com','bilivideo.cn','bilivideo.net','video.qq.com','aliyuncs.com','myqcloud.com','bytecdn.cn','ksyuncdn.com'];
 export const hostMatches=(host,domains)=>domains.some(d=>host===d||host.endsWith('.'+d));
+// WeChat Channels (视频号) video comes from video.qq.com/.../stodownload in many small ranges and is
+// encrypted in the WeChat player, so it is never a usable candidate; its share link works instead.
+export function channelsMedia(url) {try{const u=new URL(url);return hostMatches(u.hostname,['video.qq.com'])&&/\/stodownload$/.test(u.pathname);}catch{return false;}}
 export function mediaKind(url,mime='') {
   const path=new URL(url).pathname.toLowerCase();mime=mime.toLowerCase().split(';')[0];
   if(/\.m3u8$/.test(path)||mime.includes('mpegurl'))return 'hls';
@@ -36,6 +39,7 @@ export class CaptureCatalog {
   }
   observe(url,response,request={}) {
     if(![200,206].includes(response.statusCode)||!['GET','HEAD'].includes(request.method||'GET'))return null;
+    if(channelsMedia(url))return {skipped:'channels'};
     const kind=mediaKind(url,response.headers['content-type']||'');if(!kind||kind==='track')return null;
     const identity=mediaIdentity(url),previous=this.items.find(x=>x.identity===identity);
     const size=Number(response.headers['content-range']?.match(/\/(\d+)$/)?.[1]||response.headers['content-length'])||0;
@@ -47,7 +51,7 @@ export class CaptureCatalog {
   }
 }
 function cleanHeaders(headers) {const result={...headers};for(const key of ['proxy-authorization','proxy-connection','connection','upgrade','keep-alive','transfer-encoding'])delete result[key];return result;}
-export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog(),domains=captureDomains,upstream,allowLocal=false,upstreamCA,metadataDomains=courseDomains,onMedia=()=>{},onTitle=()=>{},onDiagnostic=()=>{}}={}) {
+export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog(),domains=captureDomains,upstream,allowLocal=false,upstreamCA,metadataDomains=courseDomains,onMedia=()=>{},onTitle=()=>{},onSkip=()=>{},onDiagnostic=()=>{}}={}) {
   const sockets=new Set(),contexts=new Map();
   async function validateHost(host) {
     const addresses=await dns.lookup(host,{all:true,...(allowLocal&&host==='localhost'?{family:4}:{})});
@@ -124,7 +128,7 @@ export async function createCaptureProxy({data,helper,catalog=new CaptureCatalog
       const u=new URL(req.url,origin);if(origin&&u.origin!==origin)throw Error('Target mismatch');
       const {response}=await requestURL(u.href,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req}:{})});
       readCourseNames(response,u.href);
-      const item=hostMatches(u.hostname,domains)?catalog.observe(u.href,response,req):null;if(item)onMedia(item);
+      const item=hostMatches(u.hostname,domains)?catalog.observe(u.href,response,req):null;if(item?.skipped)onSkip(item.skipped);else if(item)onMedia(item);
       res.writeHead(response.statusCode,cleanHeaders(response.headers));response.on('error',()=>res.destroy());res.on('close',()=>response.destroy());response.pipe(res);
     }catch(error){onDiagnostic('READ '+(error.code||'FAILED'));if(!res.headersSent)res.writeHead(502,{'Content-Type':'text/plain'});res.end('Unable to read upstream. Certificate checks were retained.');}
   }

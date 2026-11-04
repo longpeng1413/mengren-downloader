@@ -165,9 +165,9 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
             const sound=join(job,'completed.m4a');
             const remux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,'-map','0:a:0','-c','copy','-movflags','+faststart',sound],{quiet:true});
             const length=(await run(join(root,'ffmpeg.exe'),['-hide_banner','-i',sound],{quiet:true})).text.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
-            if(remux.code!==0||!length||Number(length[1])*3600+Number(length[2])*60+Number(length[3])<=0) throw new Error('这节只有声音，但音频保存失败');
+            if(remux.code!==0||!length||Number(length[1])*3600+Number(length[2])*60+Number(length[3])<=0) throw new Error('下载到的文件只有声音，而且音频保存失败');
             const target=await saveCompleted(sound,outputPath,videoFileName(info.title,{order:info.courseOrder}).replace(/\.mp4$/,'.m4a'));
-            message('下载完成：'+target);message('这节只有声音、没有画面，已保存为 m4a 音频。');
+            message('下载完成：'+target);message('下载到的文件只有声音、没有画面，已保存为 m4a 音频。如果原课程是有画面的视频，说明画面被加密或单独传输，软件下载不了画面。');
             return {site:info.site,title:info.title,file:target,audioOnly:true};
           }
         }
