@@ -50,6 +50,11 @@ test('Login remains on Yuanbao, only selected share is posted and no chat is cre
   assert.equal(calls[0].url,'/api/weixin/get_parse_result');assert.equal(calls[0].options.credentials,'same-origin');
   assert.deepEqual(JSON.parse(calls[0].options.body),{type:'video_channel_url',url:share,scene:1});
   const foreign=await evaluate(channelsProbeExpression(share),'https://evil.org',()=>{throw Error('should not fetch');});assert.equal(foreign.calls.length,0);
+  // Yuanbao says "success" with an empty address when it cannot open the video (seen for a member-only video).
+  const empty=await evaluate(channelsProbeExpression(share),'https://yuanbao.tencent.com',()=>({ok:true,status:200,json:async()=>({code:0,data:{playable_url:'',wx_export_id:''}})}));
+  assert.equal(empty.result.state,'empty');
+  const ready=await evaluate(channelsProbeExpression(share),'https://yuanbao.tencent.com',()=>({ok:true,status:200,json:async()=>({code:0,data:{playable_url:'https://channels.weixin.qq.com/finder-preview/pages/feed?token=f&eid=f'}})}));
+  assert.equal(ready.result.state,'ready');
 });
 test('Xiaoe login is used only on exact shop origin; no cookie data is read',async()=>{
   const denied=await evaluate(xiaoeProbeExpression(page),shop,()=>({ok:true,json:async()=>({code:11302})}));assert.equal(denied.result.state,'login');assert.equal(denied.calls[0].options.credentials,'include');

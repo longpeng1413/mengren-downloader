@@ -71,6 +71,7 @@ export async function resolveSource(address,{timeout=600000,notify=()=>{},isCanc
         if(!playback) {
           let answer;try {answer=await browser.evaluate(page.sessionId,channelsProbeExpression(share));} catch {continue;}
           if(answer?.state==='login') {if(!loginNotified){notify('请在下载专用 Edge 的腾讯元宝原网站登录；登录后自动继续，不会发送聊天消息。');loginNotified=true;}continue;}
+          if(answer?.state==='empty') throw new Error('元宝没有解析出这条视频（返回的播放地址是空的）。会员专享、付费或作者设置了观看限制的视频号内容，元宝通常解析不了，软件也无法下载；普通公开视频可以重试');
           if(answer?.state==='unavailable') throw new Error('元宝暂未返回可播放视频号地址，该链接可能暂不支持；请在元宝确认登录后重试');
           if(answer?.state!=='ready') continue;
           if(!isPlayback(answer.playbackUrl)) throw new Error('元宝返回的播放地址不符合腾讯官方域名要求');

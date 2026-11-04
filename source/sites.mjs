@@ -74,6 +74,8 @@ export function channelsProbeExpression(share) {
       if(response.status===401 || response.status===403) return {state:'login'};
       if(!response.ok) return {state:'unavailable'};
       const value=await response.json();
+      // Yuanbao answers code 0 with an empty address when it cannot open the video itself.
+      if(value?.code===0 && typeof value?.data?.playable_url==='string' && !value.data.playable_url) return {state:'empty'};
       return value?.code===0 && typeof value?.data?.playable_url==='string' ? {state:'ready',playbackUrl:value.data.playable_url} : {state:'unavailable'};
     } catch {return {state:'loading'};}
   }.toString()})(${JSON.stringify(share)})`;

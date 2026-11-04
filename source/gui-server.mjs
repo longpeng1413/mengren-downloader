@@ -87,7 +87,14 @@ function start(command,args,onLine) {
   let pending='';
   const receive=data=>{const lines=(pending+data.toString('utf8')).split(/\r?\n|\r/);pending=lines.pop();for(const l of lines)onLine(l);};
   child.stdout.on('data',receive);child.stderr.on('data',receive);child.stdin.on('error',()=>{});
-  child.done=new Promise(done=>{child.on('error',()=>done(1));child.on('close',code=>{if(pending)onLine(pending);done(code);});});
+  child.done=new Promise(done=>{
+    let finished=false;
+    const finish=code=>{if(finished)return;finished=true;if(pending){onLine(pending);pending='';}done(code);};
+    child.on('error',()=>finish(1));child.on('close',finish);
+    // A dedicated Edge started by the download inherits our output pipe and keeps it
+    // open, so "close" may never come; finish shortly after the process itself exits.
+    child.on('exit',code=>setTimeout(()=>finish(code),1500));
+  });
   return child;
 }
 const nodeScript=(name,args,onLine)=>start(node,[join(root,'source',name),...args],onLine);

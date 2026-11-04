@@ -4,11 +4,11 @@
 
 一个可以解压使用的 Windows 视频下载小工具。粘贴链接，选择画质，下载到系统“下载”文件夹。
 
-**v0.9.1 预览版**（v0.9.0 起）新增图形界面：粘贴链接、点“识别”、选好画质/音质/集数，加入下载队列一个一个下；还有下载记录、保存位置选择、登录管理、缓存清理和**自动更新**。原来的命令行窗口版本仍然保留。支持 YouTube、B 站、抖音、X（推特）、QQ 音乐单曲、喜马拉雅专辑，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。
+**v0.9.2 预览版**（v0.9.0 起）新增图形界面：粘贴链接、点“识别”、选好画质/音质/集数，加入下载队列一个一个下；还有下载记录、保存位置选择、登录管理、缓存清理和**自动更新**。原来的命令行窗口版本仍然保留。支持 YouTube、B 站、抖音、X（推特）、QQ 音乐单曲、喜马拉雅专辑，以及通过已登录原网站读取的小鹅通直播回放、微信视频号分享链接。
 
 ## 下载和使用
 
-**[下载 v0.9.1 预览版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.9.1/mengren-downloader-0.9.1-windows-x64-full.zip)** · [全部版本](https://github.com/longpeng1413/mengren-downloader/releases) · 上一个正式版：[v0.8.0](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.8.0)
+**[下载 v0.9.2 预览版完整包](https://github.com/longpeng1413/mengren-downloader/releases/download/v0.9.2/mengren-downloader-0.9.2-windows-x64-full.zip)** · [全部版本](https://github.com/longpeng1413/mengren-downloader/releases) · 上一个正式版：[v0.8.0](https://github.com/longpeng1413/mengren-downloader/releases/tag/v0.8.0)
 
 1. **完整解压**到普通文件夹（例如“文档”或 D 盘的某个文件夹），不要在压缩包内直接打开。完整包已经包含并校验全部下载组件，无需另找组件。
 2. 双击 **猛人下载器.exe**，会打开一个独立的软件窗口（借用电脑自带的 Edge 显示，和你日常用的 Edge 互不影响）。

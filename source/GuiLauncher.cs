@@ -8,8 +8,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("猛人下载器")]
 [assembly: AssemblyDescription("粘贴链接，选择画质，下载到系统下载文件夹")]
 [assembly: AssemblyProduct("猛人下载器")]
-[assembly: AssemblyVersion("0.9.1.0")]
-[assembly: AssemblyFileVersion("0.9.1.0")]
+[assembly: AssemblyVersion("0.9.2.0")]
+[assembly: AssemblyFileVersion("0.9.2.0")]
 // Starts the window version: node.exe runs source\gui-server.mjs without a console and
 // opens the Edge app window. This launcher only waits for "ready" or shows the error.
 internal static class GuiLauncher {
