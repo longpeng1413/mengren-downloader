@@ -34,7 +34,7 @@ export async function runCaptureGui({catalog,next,download,emit,shouldQuit=()=>f
       emit({type:'capture-start',id:item.id,title:item.title});
       try {
         const result=await download({...item});
-        item.downloaded=true;item.guiState='ok';emit({type:'capture-done',id:item.id,ok:true,title:item.title,file:result?.file||null});
+        item.downloaded=true;item.guiState='ok';emit({type:'capture-done',id:item.id,ok:true,title:item.title,file:result?.file||null,audioOnly:Boolean(result?.audioOnly)});
       } catch(error) {
         if(shouldQuit())break;
         item.guiState='fail';item.guiReason=String(error.message).replace(/https?:\/\/[^\s"<>]+/g,'[媒体地址]');

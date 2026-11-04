@@ -270,7 +270,7 @@ function startCapture() {
     else if(e?.type==='capture-start') capture.current={id:e.id,progress:null,speed:null};
     else if(e?.type==='capture-done') {
       capture.current=null;
-      addHistory(history,{id:randomUUID(),time:Date.now(),kind:'capture',site:'抓取',title:e.title||'抓取的视频',ok:Boolean(e.ok),info:'播放抓取',reason:e.ok?null:e.reason,files:e.file?[e.file]:[],folder:e.file?dirname(e.file):settings.saveDir});
+      addHistory(history,{id:randomUUID(),time:Date.now(),kind:'capture',site:'抓取',title:e.title||'抓取的视频',ok:Boolean(e.ok),info:e.audioOnly?'播放抓取 · 这节只有声音，已存为 m4a 音频':'播放抓取',reason:e.ok?null:e.reason,files:e.file?[e.file]:[],folder:e.file?dirname(e.file):settings.saveDir});
       historyChanged();broadcast({type:'done',ok:Boolean(e.ok),title:e.title,reason:e.reason});
     }
     else if(e?.type==='notice') toast(e.text);

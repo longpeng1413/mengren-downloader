@@ -156,7 +156,22 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         if(probe) {if(!result.text.includes('__MENGREN_SOURCE_OK__'))throw new Error('当前来源不是可下载的已结束视频');message('视频来源验证成功。');return {site:info.site,title:info.title};}
         const files=(await readdir(job)).filter(name=>/^source\.(?:mp4|mkv|webm|ts|mov|m4v)$/.test(name));
         if(files.length!==1) throw new Error('下载未生成完整视频文件');
-        const source=join(job,files[0]);await validate(source);
+        const source=join(job,files[0]);
+        // A captured lesson may be sound only (an audio course). Keep it as m4a and say so,
+        // instead of failing with "no video track".
+        if(info.site==='capture') {
+          const probe=await run(join(root,'ffmpeg.exe'),['-hide_banner','-i',source],{quiet:true});
+          if(/Stream .*Audio:/.test(probe.text)&&!/Stream .*Video:/.test(probe.text)) {
+            const sound=join(job,'completed.m4a');
+            const remux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,'-map','0:a:0','-c','copy','-movflags','+faststart',sound],{quiet:true});
+            const length=(await run(join(root,'ffmpeg.exe'),['-hide_banner','-i',sound],{quiet:true})).text.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
+            if(remux.code!==0||!length||Number(length[1])*3600+Number(length[2])*60+Number(length[3])<=0) throw new Error('这节只有声音，但音频保存失败');
+            const target=await saveCompleted(sound,outputPath,videoFileName(info.title,{order:info.courseOrder}).replace(/\.mp4$/,'.m4a'));
+            message('下载完成：'+target);message('这节只有声音、没有画面，已保存为 m4a 音频。');
+            return {site:info.site,title:info.title,file:target,audioOnly:true};
+          }
+        }
+        await validate(source);
         let soundPath;
         if(info.audioUrl) {
           const soundRelay=await createRelay(info.site,info.audioUrl,new URL(info.page).origin+'/',relayOptions);

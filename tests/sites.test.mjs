@@ -288,6 +288,9 @@ test('Ximalaya links, episode ranges, file names and preview detection',async()=
   assert.deepEqual(xmlyTarget('http://www.ximalaya.com/61425525/album/5534601/'),{album:'5534601'});
   assert.deepEqual(xmlyTarget('https://m.ximalaya.com/gatekeeper/podcast-share/album/5625249?uid=1&shrid=x'),{album:'5625249'});
   assert.deepEqual(xmlyTarget('https://www.ximalaya.com/sound/597073685'),{track:'597073685'});
+  // App share links now also end on /selfshare/... (seen 2026-11 for a single episode).
+  assert.deepEqual(xmlyTarget('https://m.ximalaya.com/selfshare/sound/360455506?cId=1&albumIds=2&sign=x'),{track:'360455506'});
+  assert.deepEqual(xmlyTarget('https://m.ximalaya.com/selfshare/album/11575892?uid=1'),{album:'11575892'});
   assert.deepEqual(xmlyTarget('https://xima.tv/1_CbQXmk?_sonic=0'),{short:'https://xima.tv/1_CbQXmk?_sonic=0'});
   for(const bad of ['https://ximalaya.com.evil.org/album/1','https://www.ximalaya.com/','https://www.ximalaya.com/album/abc','https://user:pw@www.ximalaya.com/album/1'])assert.equal(xmlyTarget(bad),null,bad);
   const all=Array.from({length:827},(_,i)=>i+1);

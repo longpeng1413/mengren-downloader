@@ -27,9 +27,9 @@ export function xmlyTarget(address) {
   if(!u) return null;
   if(u.hostname==='xima.tv') return /^\/[\w-]{4,40}\/?$/.test(u.pathname)?{short:u.href}:null;
   if(!xmlyHosts.includes(u.hostname)) return null;
-  const album=u.pathname.match(/^\/(?:\d+\/)?album\/(\d{1,12})\/?$/)||u.pathname.match(/^\/gatekeeper\/podcast-share\/album\/(\d{1,12})\/?$/);
+  const album=u.pathname.match(/^\/(?:\d+\/)?album\/(\d{1,12})\/?$/)||u.pathname.match(/^\/gatekeeper\/podcast-share\/album\/(\d{1,12})\/?$/)||u.pathname.match(/^\/selfshare\/album\/(\d{1,12})\/?$/);
   if(album) return {album:album[1]};
-  const track=u.pathname.match(/^\/(?:\d+\/)?sound\/(\d{1,12})\/?$/)||u.pathname.match(/^\/gatekeeper\/podcast-share\/(?:track|sound)\/(\d{1,12})\/?$/);
+  const track=u.pathname.match(/^\/(?:\d+\/)?sound\/(\d{1,12})\/?$/)||u.pathname.match(/^\/gatekeeper\/podcast-share\/(?:track|sound)\/(\d{1,12})\/?$/)||u.pathname.match(/^\/selfshare\/(?:sound|track)\/(\d{1,12})\/?$/);
   return track?{track:track[1]}:null;
 }
 // App share links (xima.tv) redirect through ximalaya.com; follow only inside those hosts.
@@ -119,10 +119,15 @@ export class XmlyBrowser {
     while(this.finished.length) {
       const id=this.finished.shift(),url=new URL(this.watched.get(id));this.watched.delete(id);
       let json;try{json=JSON.parse((await this.browser.call('Network.getResponseBody',{requestId:id},this.session)).body);}catch{continue;}
+      // The page also loads lists that are not ours (seen: albumId 0, answered "该专辑[id:0]已被删除").
+      const listed=url.searchParams.get('albumId');
+      if(this.albumId&&listed!==null&&listed!==this.albumId) continue;
       if(url.pathname.endsWith('/simple')) {this.albumTitle=String(json?.data?.albumPageMainInfo?.albumTitle||this.albumTitle);continue;}
       // ret 407 ("高优拦截端恶意请求") means Ximalaya throttles this client; remember it so
-      // the caller stops and explains instead of retrying.
-      if(json?.ret!==200&&json?.ret!==401) this.blocked={ret:json?.ret,msg:String(json?.msg||'').slice(0,40)};
+      // the caller stops and explains instead of retrying. Other refusals are about the album.
+      const msg=String(json?.msg||'').slice(0,40);
+      if(json?.ret===407||/拦截|频繁|恶意/.test(msg)) this.blocked={ret:json?.ret,msg};
+      else if(json?.ret!==200&&json?.ret!==401) this.albumError=msg||'返回码 '+json?.ret;
       const data=json?.data;if(json?.ret!==200||!Array.isArray(data?.tracks)) continue;
       this.total=Number(data.trackTotalCount)||this.total;
       for(const item of data.tracks) if(item?.trackId&&!item.isVideo) this.tracks.set(String(item.trackId),trackFromList(item));
@@ -135,6 +140,19 @@ export class XmlyBrowser {
   clickText(text) {
     return this.evaluate(`(()=>{const t=${JSON.stringify(String(text))};const el=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&(e.textContent||'').trim()===t&&(!/^\\d+$/.test(t)||e.closest('[class*=pagination],[class*=Pagination],[class*=pager]')));if(!el)return false;(el.closest('a,button,li')||el).click();return true;})()`,true);
   }
+  // Since 2026-11 the album pages ignore script clicks on page numbers, so click like a
+  // person: scroll the link into view and press the mouse there. The first pagination is
+  // the track list (another one further down belongs to a different list); when the number
+  // is not shown, its "next" arrow leads to the same page because pages are read in order.
+  async clickPage(number) {
+    const box=await this.evaluate(`(()=>{const outer=[...document.querySelectorAll('[class*=pagination],[class*=Pagination],[class*=pager]')].filter(p=>!p.parentElement?.closest('[class*=pagination],[class*=Pagination],[class*=pager]'));const p=outer[0];if(!p)return null;
+      const el=[...p.querySelectorAll('a,button')].find(e=>e.textContent.trim()===${JSON.stringify(String(number))})||p.querySelector('.page-next a,.page-next');if(!el)return null;
+      el.scrollIntoView({block:'center'});const r=el.getBoundingClientRect();return r.width>0?{x:r.left+r.width/2,y:r.top+r.height/2}:null;})()`);
+    if(!box) return false;
+    await sleep(300);
+    for(const type of ['mouseMoved','mousePressed','mouseReleased']) await this.browser.call('Input.dispatchMouseEvent',{type,x:box.x,y:box.y,button:'left',clickCount:1},this.session);
+    return true;
+  }
   async waitPage(number,ms) {
     for(const end=Date.now()+ms;Date.now()<end&&!isCancelled();) {
       await this.drain();
@@ -145,6 +163,7 @@ export class XmlyBrowser {
   }
   async readAlbum(albumId,{notify,timeout}) {
     const albumUrl=`https://www.ximalaya.com/album/${albumId}`;
+    this.albumId=String(albumId);
     await this.go(albumUrl);
     let state;for(let i=0;i<20&&!(state=await this.loginState())?.ok;i++) await sleep(1000);
     if(!state?.loggedIn) {
@@ -160,8 +179,8 @@ export class XmlyBrowser {
     await sleep(2500);await this.drain();
     // Sort ascending so page 1 is episode 1; this also makes the page load the list itself.
     await this.clickText('正序');
-    if(!await this.waitPage(1,8000)) {await this.clickText('2');await this.waitPage(2,8000);await this.clickText('1');await this.waitPage(1,8000);}
-    if(!this.total) throw new Error('没有读到专辑目录，请确认专辑链接能在网页上正常打开');
+    if(!await this.waitPage(1,8000)) {await this.clickPage(2);await this.waitPage(2,8000);await this.clickPage(1);await this.waitPage(1,8000);}
+    if(!this.total) throw new Error(this.albumError?`喜马拉雅没有给出这张专辑的目录（${this.albumError}）`:'没有读到专辑目录，请确认专辑链接能在网页上正常打开');
     const pageSize=30,pageCount=Math.ceil(this.total/pageSize);
     let misses=0;
     for(let number=2;number<=pageCount&&this.tracks.size<this.total;number++) {
@@ -170,10 +189,10 @@ export class XmlyBrowser {
       if(number%5===0) notify(`正在读取目录：第 ${number}/${pageCount} 页`);
       // Read at a person's pace: rapid paging gets the client blocked (ret 407).
       await sleep(1500);
-      if((await this.clickText(String(number)))&&await this.waitPage(number,8000)) {misses=0;continue;}
+      if((await this.clickPage(number))&&await this.waitPage(number,8000)) {misses=0;continue;}
       // The list may have fallen back to newest-first; sort ascending again and retry once.
       await this.clickText('正序');await this.waitPage(1,5000);
-      if((await this.clickText(String(number)))&&await this.waitPage(number,8000)) {misses=0;continue;}
+      if((await this.clickPage(number))&&await this.waitPage(number,8000)) {misses=0;continue;}
       if(++misses>=3) {notify(`连续 3 页没有读到，目录只读了 ${this.tracks.size}/${this.total} 集；请把下载专用 Edge 窗口放到前台后重试`);break;}
     }
     const tracks=[...this.tracks.values()].sort((a,b)=>a.index-b.index);

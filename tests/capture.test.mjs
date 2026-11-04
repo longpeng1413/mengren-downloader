@@ -62,3 +62,16 @@ test('HTTP/HTTPS media capture, non-media TLS tunnel and full download work with
   const refused=await throughTLS(proxy.port,securePort,'localhost',localCA);assert.ok(refused.startsWith('HTTP/1.1 502'));assert.equal(proxy.catalog.items.length,0);
  }finally{if(proxy)await proxy.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}if(secureServer){secureServer.closeAllConnections();await new Promise(done=>secureServer.close(done));}await remove(folder);await remove(upstreamFolder);}
 });
+test('A captured lesson with sound only is kept as m4a instead of failing',async()=>{
+ const folder=await mkdtemp(join(tmpdir(),'mengren-capture-audio-'));let server;
+ try{
+  const lesson=join(folder,'lesson.mp4');const ff=spawnSync(resolve('ffmpeg.exe'),['-v','error','-f','lavfi','-i','sine=frequency=440:sample_rate=44100','-t','2','-c:a','aac','-f','mp4',lesson],{windowsHide:true,encoding:'utf8'});assert.equal(ff.status,0,ff.stderr);
+  const bytes=await readFile(lesson);
+  server=http.createServer((req,res)=>{const m=req.headers.range?.match(/^bytes=(\d+)-(\d*)$/);const first=m?Number(m[1]):0,last=m&&m[2]?Math.min(Number(m[2]),bytes.length-1):bytes.length-1;res.writeHead(m?206:200,{'Content-Type':'video/mp4','Content-Length':last-first+1,...(m?{'Content-Range':`bytes ${first}-${last}/${bytes.length}`}:{})});res.end(bytes.subarray(first,last+1));});
+  const port=await listen(server),address='https://media.example.test/lesson.mp4';
+  const getUpstream=async()=>({address,response:await new Promise(done=>http.get(`http://127.0.0.1:${port}/`,done))});
+  const result=await downloadResolved({site:'capture',title:'只有声音的一课',courseOrder:2,page:address,mediaUrl:address,requireAudio:true},address,folder,{relayOptions:{allowMedia:()=>true,getUpstream}});
+  assert.equal(result.audioOnly,true);assert.ok(result.file.endsWith('02. 只有声音的一课.m4a'),result.file);
+  const decoded=spawnSync(resolve('ffmpeg.exe'),['-v','error','-xerror','-i',result.file,'-f','null','-'],{encoding:'utf8',windowsHide:true});assert.equal(decoded.status,0,decoded.stderr);
+ }finally{if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await remove(folder);}
+});
