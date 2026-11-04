@@ -131,7 +131,7 @@ async function recognize({text,qqMode}) {
   } else {
     await mkdir(dirs.lists,{recursive:true});
     rec.listFile=join(dirs.lists,id+'.json');
-    rec.child=nodeScript('ximalaya.mjs',['--url',url,'--output',settings.saveDir,'--list',rec.listFile],onLine);
+    rec.child=nodeScript(info.kind==='course'?'bili-courses.mjs':'ximalaya.mjs',['--url',url,'--output',settings.saveDir,'--list',rec.listFile],onLine);
   }
   rec.child.done.then(code=>{
     rec.child=null;
@@ -168,6 +168,12 @@ function enqueue({rid,quality,format,episodes}) {
     const f=rec.result.formats.find(x=>x.prefix===format)||rec.result.formats.find(x=>x.prefix===rec.result.default);
     if(!f) return {error:'没有可下载的音质。'};
     addJob({...common,title:rec.result.title+(rec.result.singers?.length?' - '+rec.result.singers.join('、'):''),fixedTitle:true,format:f.prefix,qqMode:rec.qqMode,sub:'QQ 音乐 · '+f.label});
+  } else if(rec.kind==='course') {
+    const valid=new Set(rec.result.tracks.map(t=>t.index));
+    const picked=[...new Set((Array.isArray(episodes)?episodes:[]).map(Number).filter(n=>valid.has(n)))];
+    if(!picked.length)return {error:'请至少选择一节课程。'};
+    const q=qualityLabels[quality]?quality:'1080';
+    addJob({...common,title:rec.result.title,fixedTitle:true,listFile:rec.listFile,select:compressSelection(picked),quality:q,parts:picked.length,sub:rec.site+' · '+picked.length+' 节',folder:rec.result.folder});
   } else {
     const valid=new Set(rec.result.tracks.map(t=>t.index));
     const picked=rec.result.single?[]:(Array.isArray(episodes)?episodes:[]).map(Number).filter(n=>valid.has(n));
@@ -180,13 +186,14 @@ function enqueue({rid,quality,format,episodes}) {
 function retry(historyId) {
   const h=history.find(x=>x.id===historyId);
   if(!h||!h.url) return {error:'这条记录不能重试。'};
-  if(h.kind==='xmly') return {recognizeAgain:h.url};
+  if(['xmly','course'].includes(h.kind)) return {recognizeAgain:h.url};
   if(h.kind==='video') addJob({kind:'video',site:h.site,url:h.url,title:'',quality:h.quality||settings.quality,sub:h.sub||h.site});
   else if(h.kind==='qq') addJob({kind:'qq',site:h.site,url:h.url,title:h.title,fixedTitle:true,format:h.format,qqMode:h.qqMode||'best',sub:h.sub});
   else return {error:'这条记录不能重试。'};
   return {ok:true};
 }
 function commandFor(job) {
+  if(job.kind==='course')return [node,[join(root,'source','bili-courses.mjs'),'--url',job.url,'--output',settings.saveDir,'--quality',job.quality,'--tracks-file',job.listFile,'--episodes',job.select]];
   if(job.kind==='video') return [powershell,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(root,'download.ps1'),'-Url',job.url,'-Quality',job.quality,'-OutputDirectory',settings.saveDir]];
   if(job.kind==='qq') return [node,[join(root,'source','qqmusic.mjs'),'--url',job.url,'--output',settings.saveDir,'--quality',job.qqMode,'--format',job.format]];
   return [node,[join(root,'source','ximalaya.mjs'),'--url',job.url,'--output',settings.saveDir,'--tracks-file',job.listFile,...(job.select?['--select',job.select]:[])]];
@@ -236,7 +243,7 @@ function finishJob(job,code) {
   const ok=code===0;
   const reason=ok?null:(job.failure||job.error||job.note||'下载没有完成');
   let info=job.sub;
-  if(job.kind==='xmly'&&job.summary) info=job.summary;
+  if(['xmly','course'].includes(job.kind)&&job.summary) info=job.summary;
   else if(job.files.length>1) info+=` · ${job.files.length} 个文件`;
   const entry={id:randomUUID(),time:Date.now(),kind:job.kind,site:job.site,url:job.url,title:job.title||job.site+' 下载',sub:job.sub,
     quality:job.quality,format:job.format,qqMode:job.qqMode,ok,info,reason,files:job.files.slice(0,50),

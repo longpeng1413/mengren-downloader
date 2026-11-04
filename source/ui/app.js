@@ -104,7 +104,7 @@ function renderVersion() { $$('.version').forEach(el => el.textContent = 'v' + s
 
 /* ---------- 识别 ---------- */
 let current = null;
-const loadingText = {
+const loadingText = { course: '正在读取课程目录，请在专用 Edge 登录购买账号……',
   qq: '正在读取这首歌能下载的音质……用会员账号读取时会打开“下载专用 Edge”，第一次需要在里面登录 QQ 音乐。',
   xmly: '正在读取专辑目录……第一次需要在弹出的“下载专用 Edge”里登录喜马拉雅。集数多的专辑要一两分钟（为免被网站限制，会按正常速度翻页）。',
 };
@@ -151,22 +151,24 @@ function renderResult() {
     body += `<div class="options stack">${t.formats.map(f => `<label class="option"><input type="radio" name="fmt" value="${esc(f.prefix)}" ${f.prefix === t.default ? 'checked' : ''}><span><b>${esc(f.label)}</b> · ${mb(f.size)}${f.prefix === t.default ? ' · <b>推荐</b>' : ''}<small>${esc(f.note)}</small></span></label>`).join('')}</div>`;
     body += `<p class="muted">同时保存同名 .lrc 歌词。只下载账号能完整播放的歌曲，不下载试听片段。</p><div class="actions"><button class="primary" data-action="enqueue">加入下载</button></div>`;
   } else {
-    const a = r.result, paid = a.tracks.filter(t => t.isPaid).length, have = a.tracks.filter(t => t.have).length;
+    const a = r.result, course = r.kind === 'course', paid = a.tracks.filter(t => t.isPaid).length, have = a.tracks.filter(t => t.have).length;
     body += `<span class="title">${esc(a.title.split('|')[0].trim())}</span></div>`;
     if (a.single) {
       const t = a.tracks[0];
       body += `<div class="meta">单集：${esc(t.title)}${t.duration ? ' · ' + clock(t.duration) : ''}${t.isPaid ? ' · 会员/付费' : ''}${t.have ? ' · 以前下载过' : ''}</div>`;
     } else {
-      body += `<div class="meta">共 ${a.total} 集，读到 ${a.tracks.length} 集（免费 ${a.tracks.length - paid}，会员/付费 ${paid}）${have ? `，其中 ${have} 集以前下载过` : ''}</div>`;
+      body += `<div class="meta">共 ${a.total} 集，读到 ${a.tracks.length} 集${course ? '' : `（免费 ${a.tracks.length - paid}，会员/付费 ${paid}）`}${have ? `，其中 ${have} 集以前下载过` : ''}</div>`;
       if (a.tracks.length < a.total) body += `<p class="muted">有几集网页没有列出，可能已下架或只在 App 里能看到。</p>`;
+      body += `${course && a.kind === 'cheese' ? '<div class="actions"><button class="small" data-sel="初级">初级</button><button class="small" data-sel="中级">中级</button><button class="small" data-sel="高级">高级</button><button class="small" data-sel="current">当前课时</button></div>' : ''}`;
       body += `<div class="episodes-tools"><input type="text" id="range" placeholder="填范围，如 1-50、100-、3,5,8"><button class="small" data-sel="range">按范围选</button><button class="small" data-sel="all">全选</button><button class="small" data-sel="new">只选没下过的</button><button class="small" data-sel="none">全不选</button></div>`;
-      body += `<div class="episodes">${a.tracks.map(t => `<label class="episode"><input type="checkbox" value="${t.index}" ${t.have ? '' : 'checked'}><span class="num">${String(t.index).padStart(3, '0')}</span><span>${esc(t.title)}</span><span>${t.isPaid ? '<span class="tag vip">会员</span>' : ''}${t.have ? '<span class="tag have">已下载</span>' : ''}</span><span class="len">${clock(t.duration)}</span></label>`).join('')}</div>`;
+      body += `<div class="episodes">${a.tracks.map(t => `<label class="episode"><input type="checkbox" value="${t.index}" ${(!t.have && (!course || t.index === a.current)) ? 'checked' : ''}><span class="num">${String(t.index).padStart(3, '0')}</span><span>${esc(t.title)}</span><span>${t.isPaid ? '<span class="tag vip">会员</span>' : ''}${t.have ? '<span class="tag have">已下载</span>' : ''}</span><span class="len">${clock(t.duration)}</span></label>`).join('')}</div>`;
     }
-    body += `<p class="muted">保存到：${esc(a.folder)}　以前下载过的会自动跳过；会员单集需要账号有权限，试听片段不会下载。</p>`;
+    if(course && r.quality) body += `<div class="options">${qualities.map(([v,label])=>`<label class="option"><input type="radio" name="q" value="${v}" ${v==='1080'?'checked':''}><span>${label}</span></label>`).join('')}</div>`;
+    body += `<p class="muted">保存到：${esc(a.folder)}　以前下载过的会自动跳过；${course ? '只保存账号有权完整观看的课程。' : '会员单集需要账号有权限，试听片段不会下载。'}</p>`;
     body += `<div class="actions"><span class="muted" id="ep-count"></span><button class="primary" data-action="enqueue">加入下载</button></div>`;
   }
   box.innerHTML = body; box.hidden = false;
-  if (r.kind === 'xmly' && !r.result.single) updateEpisodeCount();
+  if (r.kind === 'course' || (r.kind === 'xmly' && !r.result.single)) updateEpisodeCount();
 }
 function updateEpisodeCount() {
   const n = $$('.episode input:checked').length;
@@ -176,6 +178,8 @@ function updateEpisodeCount() {
 function selectEpisodes(how) {
   const boxes = $$('.episode input'), tracks = current.result.tracks;
   const have = new Set(tracks.filter(t => t.have).map(t => t.index));
+  if (['初级','中级','高级'].includes(how)) { const picked=new Set(tracks.filter(t=>new RegExp(how+'\\d+').test(t.title)).map(t=>t.index));boxes.forEach(b=>b.checked=picked.has(+b.value)); }
+  if (how === 'current') boxes.forEach(b=>b.checked=+b.value===current.result.current);
   if (how === 'all') boxes.forEach(b => b.checked = true);
   if (how === 'none') boxes.forEach(b => b.checked = false);
   if (how === 'new') boxes.forEach(b => b.checked = !have.has(+b.value));
@@ -199,7 +203,8 @@ async function enqueue() {
   const body = { rid: current.id };
   if (current.kind === 'video') body.quality = $('input[name=q]:checked')?.value || state.settings.quality;
   if (current.kind === 'qq') body.format = $('input[name=fmt]:checked')?.value;
-  if (current.kind === 'xmly') body.episodes = $$('.episode input:checked').map(b => +b.value);
+  if (current.kind === 'course') body.quality = $('input[name=q]:checked')?.value || '1080';
+  if (['xmly','course'].includes(current.kind)) body.episodes = $$('.episode input:checked').map(b => +b.value);
   const r = await post('enqueue', body);
   if (!r.ok) return;
   toast('已加入下载');

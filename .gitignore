@@ -22,3 +22,6 @@
 # Claude Code 本机权限设置，只在这台电脑生效
 /.claude/settings.local.json
 /猛人下载器-命令行版.exe
+
+.bili-course-state.json
+.bili-course-state.json.pending
