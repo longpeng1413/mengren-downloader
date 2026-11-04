@@ -521,7 +521,7 @@ async function existingInstance() {
   if(!info?.port||!info.token||!running(info.pid)) return null;
   try {
     const r=await fetch(`http://127.0.0.1:${info.port}/api/ping`,{headers:{'x-mengren-token':info.token},signal:AbortSignal.timeout(2000)});
-    return r.ok?info:null;
+    return r.ok?{...info,windows:Number((await r.json()).windows)||0}:null;
   } catch {return null;}
 }
 
@@ -553,7 +553,7 @@ function createServer(token) {
       const cookie=(req.headers.cookie||'').match(/(?:^|;\s*)mengren=([0-9a-f]+)/)?.[1];
       if(!sameToken(cookie,token)&&!sameToken(req.headers['x-mengren-token'],token)) return json(res,401,{error:'unauthorized'});
       const route=req.method+' '+url.pathname;
-      if(route==='GET /api/ping') return json(res,200,{ok:true});
+      if(route==='GET /api/ping') return json(res,200,{ok:true,windows:clients.size});
       if(route==='GET /api/events') {
         res.writeHead(200,{...security,'Content-Type':'text/event-stream; charset=utf-8',Connection:'keep-alive'});
         res.write('data: '+JSON.stringify(snapshot())+'\n\n');
@@ -620,7 +620,12 @@ async function listen(server) {
 async function main() {
   for(const d of [dirs.gui,dirs.logs]) await mkdir(d,{recursive:true});
   const other=await existingInstance();
-  if(other) {openWindow(other.port,other.token);process.stdout.write('ready\n');return;}
+  // Already open: the launcher brings that window to the front instead of opening another.
+  if(other) {
+    if(other.windows>0) process.stdout.write('ready focus\n');
+    else {openWindow(other.port,other.token);process.stdout.write('ready\n');}
+    return;
+  }
   if(existsSync(join(dirs.updates,'staging'))&&Date.now()-(await stat(join(dirs.updates,'staging'))).mtimeMs<120000) {
     process.stdout.write('error 正在安装更新，请过半分钟再打开。\n');process.exitCode=2;return;
   }

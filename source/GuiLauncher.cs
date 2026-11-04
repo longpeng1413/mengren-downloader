@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -36,6 +37,7 @@ internal static class GuiLauncher {
                 Task<string> first = process.StandardOutput.ReadLineAsync();
                 if (!first.Wait(45000)) throw new TimeoutException("界面启动超时。请稍后再试，或打开“猛人下载器-命令行版.exe”。");
                 string line = first.Result ?? "";
+                if (line.StartsWith("ready focus")) { BringWindowToFront(); return 0; }
                 if (line.StartsWith("ready")) return 0;
                 if (line.StartsWith("error ")) throw new InvalidOperationException(line.Substring(6));
                 throw new InvalidOperationException("界面没有启动成功。可以先用“猛人下载器-命令行版.exe”下载。");
@@ -45,4 +47,31 @@ internal static class GuiLauncher {
             return 1;
         }
     }
+    // The program is already open: show its Edge app window (titled like the page)
+    // instead of a second one. Windows lets the program the user just started do this.
+    private static void BringWindowToFront() {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr window, IntPtr data) {
+            if (!IsWindowVisible(window)) return true;
+            StringBuilder title = new StringBuilder(64);
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString() != "猛人下载器") return true;
+            uint pid;
+            GetWindowThreadProcessId(window, out pid);
+            try { if (Process.GetProcessById((int)pid).ProcessName != "msedge") return true; } catch { return true; }
+            found = window;
+            return false;
+        }, IntPtr.Zero);
+        if (found == IntPtr.Zero) return;
+        if (IsIconic(found)) ShowWindow(found, 9);
+        SetForegroundWindow(found);
+    }
+    private delegate bool EnumWindowsProc(IntPtr window, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
 }

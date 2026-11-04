@@ -123,6 +123,8 @@ test('The window server answers only its own page with the per-run token',async 
   const cookie=login.headers.get('set-cookie').split(';')[0];
   assert.match(login.headers.get('set-cookie'),/HttpOnly; SameSite=Strict/);
   assert.equal((await fetch(base+'/api/storage',{headers:{cookie}})).status,200);
+  // A second double-click asks this to decide between showing the open window and opening one.
+  assert.deepEqual(await (await fetch(base+'/api/ping',{headers:{cookie}})).json(),{ok:true,windows:0});
   // Other web pages cannot drive it: a foreign Origin or a form post is refused.
   const post=(headers,body='{"what":"logs"}')=>fetch(base+'/api/clean',{method:'POST',headers:{cookie,...headers},body});
   assert.equal((await post({'content-type':'application/json',origin:'https://evil.example'})).status,403);

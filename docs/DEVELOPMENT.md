@@ -204,7 +204,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File download.ps1 -Probe -Url
 
 ## 窗口版（v0.9.0 预览版）
 
-双击 `猛人下载器.exe` → GuiLauncher 隐藏启动 `node.exe source/gui-server.mjs` 并等它输出 `ready` → 服务监听 127.0.0.1（优先固定端口 47380–47384，便于 Edge 记住通知权限），每次生成不同的口令，写 `%LOCALAPPDATA%\MengrenDownloader\Gui\instance.json`，用单独的 Edge 配置目录 `AppWindow` 以 `--app` 打开窗口。再次双击只给已运行的服务开新窗口。窗口最上面的标题栏由 Windows/Edge 绘制，页面无法改它的高度和字号。
+双击 `猛人下载器.exe` → GuiLauncher 隐藏启动 `node.exe source/gui-server.mjs` 并等它输出 `ready` → 服务监听 127.0.0.1（优先固定端口 47380–47384，便于 Edge 记住通知权限），每次生成不同的口令，写 `%LOCALAPPDATA%\MengrenDownloader\Gui\instance.json`，用单独的 Edge 配置目录 `AppWindow` 以 `--app` 打开窗口。再次双击时，若已有窗口连着服务，服务输出 `ready focus`，GuiLauncher 找到标题为“猛人下载器”的 Edge 窗口，恢复并调到最前，不再新开；没有窗口连着时才新开一个。窗口最上面的标题栏由 Windows/Edge 绘制，页面无法改它的高度和字号。
 
 - 安全：只认 Host 为 `127.0.0.1:端口` 的请求；页面首次带口令访问后换成 HttpOnly + SameSite=Strict 的 Cookie；所有 `/api` 需口令；POST 还需本页 Origin 且为 JSON（其他网页无法驱动它）；静态文件只有 ui 三个文件和图标。日志把网址替换为 `[地址]`。
 - 下载：普通视频调用 `download.ps1 -Url -Quality -OutputDirectory`（保留原有 X/B 站浏览器备用路径）；QQ 音乐先 `qqmusic.mjs --list` 列音质，再 `--format` 下载；喜马拉雅先 `ximalaya.mjs --list 文件` 读目录并存入 `Gui\lists`，再 `--tracks-file 文件 --select 范围` 下载，不重复翻目录。子进程带 `MENGREN_GUI=1`：结构化结果以 `@@mengren {json}` 输出，取消是向标准输入写 `cancel`（等同 Ctrl+C）；download.ps1 取消时结束进程树，临时目录按原规则清理。一次只运行一个任务。
