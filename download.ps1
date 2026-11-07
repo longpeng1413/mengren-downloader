@@ -60,7 +60,7 @@ try {
         exit 0
     }
     if (!$Url) {
-        Write-Host '猛人下载器 v1.0.0（命令行版）'
+        Write-Host '猛人下载器 v1.1.0（命令行版）'
         Write-Host "默认保存位置：$OutputDirectory"
         $Url = Read-MengrenInput '请粘贴视频、QQ 音乐或喜马拉雅链接'
     }
