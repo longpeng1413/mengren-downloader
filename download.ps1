@@ -89,6 +89,13 @@ try {
         throw '请输入完整的 http 或 https 视频网页链接。'
     }
     $siteHost = $parsed.DnsSafeHost.ToLowerInvariant()
+    if (($siteHost -in @('www.bilibili.com','bilibili.com') -and $parsed.AbsolutePath -match '^/cheese/play/ep[0-9]+/?$') -or ($siteHost -eq 'mall.bilibili.com' -and $parsed.AbsolutePath -eq '/lesson/play')) {
+        $courseQuality = if ($Quality) { $Quality } else { '1080' }
+        $courseArgs = @((Join-Path $toolRoot 'source\bili-courses.mjs'),'--url',$Url,'--output',$OutputDirectory,'--quality',$courseQuality)
+        if ($Probe) { $courseArgs += '--probe' }
+        & (Join-Path $toolRoot 'node.exe') @courseArgs
+        exit $LASTEXITCODE
+    }
     if ($siteHost -match '(^|\.)ximalaya\.com$' -or $siteHost -eq 'xima.tv') {
         Write-Host '喜马拉雅：在下载专用 Edge 里读取专辑目录（需要登录喜马拉雅），保留原始 m4a 格式。'
         Write-Host '只下载你的账号能完整收听的单集；不下载试听片段，不处理加密文件，不读取你的登录信息。'

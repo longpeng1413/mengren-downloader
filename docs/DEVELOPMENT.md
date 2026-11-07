@@ -280,3 +280,14 @@ source/capture-menu.mjs 实现数字、范围、多编号和“全部”顺序�
 - `publicIp` 允许 198.18.0.0/15（Clash/Mihomo/Surge TUN fake-ip），其余私网、回环、链路本地、CGNAT 范围仍拒绝。
 - 入口用 `Console.CancelKeyPress` 拦截 Ctrl+C：子任务停止，入口提示后继续会话。`tests/ctrlc-harness.ps1` 在独立隐藏控制台里发送真实 Ctrl+C；测试运行器会让子进程继承“忽略 Ctrl+C”，所以 harness 启动入口前要先恢复正常 Ctrl+C 处理。
 - 部分 Windows 电脑（已观察到运行 360 主动防御的开发机）会重置由服务器先关闭的回环短连接。抓取代理上游请求和测试客户端都请求保持连接、并在响应结束后由本方关闭；新写的回环测试也应这样做，不要用增加重试次数掩盖。
+
+
+## B 站课程
+
+`source/bili-course-target.mjs` 是无副作用的严格链接识别，供 gui-core 和下载器共用；`source/bili-courses.mjs` 读取本任务专用标签页的官方目录/播放响应，核对当前课程、课时、观看权限及完整时长。媒体仍经既有 HTTPS/公网地址/重定向检查，不读取浏览器 Cookie 或存储。
+
+`--list <file>` 保存仅含课程目录的缓存并输出 `guiEvent({type:'course',title,total,current,folder,tracks})`；tracks 仅含编号、标题、时长和是否已下载。`--tracks-file <file> --episodes <selection>` 使用选择结果，下载前仍核对原网站最新目录及每节播放权限。窗口模式无显式选择时立即报错，不等待 readline；stdin 的 cancel 复用 site-download 的取消处理。窗口识别、排队和重试参考喜马拉雅；下载不保存带签名地址，取消关闭本任务标签并清理临时目录。
+
+会员购原响应中观察到的 HTTP MP4，保留域名、路径和查询参数仅改为 HTTPS 后已通过真实下载；没有 HTTP 降级。只有已验证 CDN 的普通 MP4/m4s 可进入媒体中继。课堂目录时长供界面显示，下载整节校验以官方播放响应 timelength 为准（网站目录时长可能有出入）。
+
+回归命令包含 `tests/bili-courses.test.mjs` 与 `tests/gui.test.mjs`。测试和实际账号验证分别记录于 PROJECT_STATUS，不把本地模拟或旧脚本结果当作新入口实测。

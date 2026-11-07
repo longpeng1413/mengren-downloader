@@ -38,6 +38,7 @@ export function channelsShare(address) {
 }
 export function isPlayback(address) { const u=safeHttps(address); return Boolean(u && !u.hash && u.hostname==='channels.weixin.qq.com' && u.pathname==='/finder-preview/pages/feed' && u.searchParams.get('token') && u.searchParams.get('eid')); }
 export function allowedMedia(site,address) {
+  if(site==='bili-course') return courseMediaAllowed(address);
   const u=safeHttps(address); if(!u || u.hash) return false;
   if(site==='douyin')return hostIn(u.hostname,['douyinvod.com']);
   if(site==='bili')return hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com']);
@@ -166,4 +167,11 @@ export function biliProbeExpression(page,quality='best') {
     if(info.dash?.video?.length||info.durl?.length)return {state:'quality-unavailable'};
     return {state:'loading'};
   }.toString()})(${JSON.stringify(page)},${JSON.stringify(quality)})`;
+}
+
+// Ordinary HTTPS classroom DASH/MP4 and mall MP4; no manifests or keys.
+export function courseMediaAllowed(address) {
+  let u;try{u=new URL(address);}catch{return false;}
+  if(typeof address!=='string'||address.length>12000||u.username||u.password||u.hash||u.port)return false;
+  return u.protocol==='https:'&&hostIn(u.hostname,['bilivideo.com','bilivideo.cn','bilivideo.net','hdslb.com'])&&/\.(?:mp4|m4s)$/i.test(u.pathname);
 }

@@ -49,12 +49,22 @@ export async function run(executable,args,{quiet=false}={}) {
     child.on('close',code=>{child=null;if(!quiet&&pending)emit(pending);resolve({code,text});});
   });
 }
-export async function validate(file,{requireAudio=false}={}) {
+export async function validate(file,{requireAudio=false,expectedSeconds=0}={}) {
   const answer=await run(join(root,'ffmpeg.exe'),['-hide_banner','-i',file],{quiet:true});
   if(requireAudio&&!/Stream .*Audio:/.test(answer.text)) throw new Error('抓到的是独立视频轨道，尚未匹配音轨，未保存为完整视频');
   if(!/Stream .*Video:/.test(answer.text)) throw new Error('文件缺少视频轨道，未作为完整视频保存');
   const duration=answer.text.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
   if(!duration || Number(duration[1])*3600+Number(duration[2])*60+Number(duration[3])<=0) throw new Error('文件播放时长无效');
+  const seconds=Number(duration[1])*3600+Number(duration[2])*60+Number(duration[3]);
+  if(expectedSeconds>0&&Math.abs(seconds-expectedSeconds)>3)throw new Error('文件时长与整节课程不一致，未作为完整课程保存');
+  return {seconds};
+}
+// Preserve source timestamps when checking variable-frame-rate course material.
+export async function validateCourseDecode(file,seconds) {
+  for(const offset of [0,Math.max(0,seconds-8)]) {
+    const answer=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-ss',String(offset),'-i',file,'-t','4','-fps_mode','passthrough','-enc_time_base','demux','-f','null','-'],{quiet:true});
+    if(answer.code!==0||answer.text.trim())throw new Error('课程文件首尾解码检查失败，未保存');
+  }
 }
 export async function cleanup(job,output) {
   if(dirname(job)!==output || !basename(job).startsWith('.mengren-')) throw new Error('临时目录范围校验失败');
@@ -136,7 +146,7 @@ async function downloadX(address,output,{probe,quality,timeout}) {
 }
 export async function downloadResolved(info,address,output,{probe=false,relayOptions={}}={}) {
   message('已识别：'+info.title);
-  message(info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':info.site==='x'?'将按所选画质上限下载 X 网页提供的视频。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
+  message(info.site==='bili-course'?'将下载账号获准的完整课程，保留网站提供的音画并核对时长。':info.site==='bili'?'将下载当前账号可获取的 B 站画质并合并音画。':info.site==='x'?'将按所选画质上限下载 X 网页提供的视频。':'将下载网站提供的原始视频；当前平台入口不承诺可切换分辨率。');
   const outputPath=resolve(output);message('保存位置：'+outputPath);
   if(!probe) {await mkdir(outputPath,{recursive:true});if(await removeAbandonedJobs(outputPath))message('已清理上次中断留下的临时文件。');}
   const job=probe?null:await mkdtemp(join(outputPath,'.mengren-'));
@@ -187,8 +197,9 @@ export async function downloadResolved(info,address,output,{probe=false,relayOpt
         message('正在合并为本地 MP4 文件……');
         const mux=await run(join(root,'ffmpeg.exe'),['-hide_banner','-loglevel','error','-y','-i',source,...(soundPath?['-i',soundPath]:[]),'-map','0:v:0','-map',soundPath?'1:a:0':'0:a:0?','-c','copy','-movflags','+faststart',merged],{quiet:true});
         if(mux.code!==0) throw new Error('MP4 合并失败，没有保存为成功结果');
-        await validate(merged,{requireAudio:Boolean(info.requireAudio)});
-        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,{order:info.site==='capture'?info.courseOrder:undefined}));
+        await validate(merged,{requireAudio:Boolean(info.requireAudio),expectedSeconds:info.expectedSeconds||0});
+        if(info.site==='bili-course') await validateCourseDecode(merged,info.expectedSeconds);
+        const target=await saveCompleted(merged,outputPath,videoFileName(info.title,{order:['capture','bili-course'].includes(info.site)?info.courseOrder:undefined}));
         message('下载完成：'+target);return {site:info.site,title:info.title,file:target};
       } catch(error) {
         if(cancelled) throw new Error('下载已取消');

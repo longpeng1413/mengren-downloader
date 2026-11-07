@@ -1,3 +1,4 @@
+import {courseTarget} from './bili-course-target.mjs';
 import {basename} from 'node:path';
 // Pure helpers of the window version (gui-server.mjs), kept apart so tests can load them.
 
@@ -22,6 +23,7 @@ export function classify(address) {
   let u;try{u=new URL(address);}catch{return null;}
   if(!['http:','https:'].includes(u.protocol)) return null;
   const host=u.hostname.toLowerCase();
+  const course=courseTarget(address);if(course)return {kind:'course',site:course.kind==='cheese'?'B 站课堂':'B 站会员购',quality:course.kind==='cheese',note:'在专用 Edge 登录购买账号后，勾选要下载的课时。'};
   if(hostIs(host,['y.qq.com'])) return {kind:'qq',site:'QQ 音乐'};
   if(hostIs(host,['ximalaya.com'])||host==='xima.tv') return {kind:'xmly',site:'喜马拉雅'};
   if(hostIs(host,['youtube.com','youtu.be'])) return {kind:'video',site:'YouTube',quality:true};
